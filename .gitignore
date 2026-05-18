@@ -1,0 +1,33 @@
+# 의존성
+node_modules/
+
+# 환경변수 (절대 커밋 금지)
+config/.env
+
+# 데이터 (로컬 전용)
+data/
+logs/
+
+# ChromaDB 데이터
+*.db
+*.db-shm
+*.db-wal
+
+# ngrok
+.ngrok*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code 설정
+.claude/
+
+# 임시 파일
+*.tmp
+*.log
+.playwright-mcp/

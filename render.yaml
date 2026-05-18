@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: jhc-honey-chatbot
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SQLITE_PATH
+        value: /tmp/jhc_chatbot.db
+      - key: LOG_LEVEL
+        value: info
+      - key: SEARCH_MODE
+        value: memory
+      - key: SEARCH_MIN_SCORE
+        value: "0.05"
+      - key: SEARCH_TOP_K
+        value: "3"
+      - key: SEARCH_KEYWORD_BONUS
+        value: "1.5"
+      - key: SEARCH_EXACT_BONUS
+        value: "2.0"
+      - key: CACHE_TTL
+        value: "300"
+      - key: KAKAO_CHANNEL_ID
+        sync: false
+      - key: KAKAO_CHANNEL_SECRET
+        sync: false
+      - key: KAKAO_WEBHOOK_VERIFY_TOKEN
+        sync: false

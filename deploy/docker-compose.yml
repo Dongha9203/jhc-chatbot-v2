@@ -1,0 +1,61 @@
+version: '3.8'
+
+# JHC Honey 챗봇 v2 — Docker Compose
+# 무료 구성: ChromaDB + Node.js 앱
+# 실행: docker-compose up -d
+
+services:
+
+  # ── ChromaDB 벡터DB (무료 오픈소스) ──
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: jhc-chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Node.js 챗봇 앱 ──
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: jhc-honey-bot
+    ports:
+      - "3000:3000"
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - PORT=3000
+    env_file:
+      - ../config/.env
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  chromadb_data:
+    driver: local
+  app_data:
+    driver: local
+  app_logs:
+    driver: local
