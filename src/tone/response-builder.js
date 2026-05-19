@@ -23,8 +23,8 @@ class ResponseBuilder {
    */
   build(params) {
     const { situation, searchResults, userName, meta, channel, history } = params;
-    const name = userName || '';
-    const honorific = name ? `${name}${settings.persona.honorific}` : settings.persona.honorific;
+    const name = userName || '고객';
+    const honorific = `${name}${settings.persona.honorific}`;
 
     switch (situation) {
       case SITUATIONS.S1: return this._buildNormal(honorific, searchResults, channel);
