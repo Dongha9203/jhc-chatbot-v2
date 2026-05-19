@@ -69,8 +69,8 @@ class WebhookHandler {
    * 채널 추가 환영 메시지
    */
   _handleFollow(body) {
-    const welcome = settings.persona.followGreeting;
-    return kakaoTemplates.simpleText(welcome);
+    const name = body?.user?.properties?.nickname || body?.userRequest?.user?.properties?.nickname || '';
+    return kakaoTemplates.welcomeResponse(name);
   }
 
   /**
