@@ -5,7 +5,8 @@ node_modules/
 config/.env
 
 # 데이터 (로컬 전용)
-data/
+data/chromadb/
+data/*.db
 logs/
 
 # ChromaDB 데이터
