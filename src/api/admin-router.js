@@ -100,35 +100,40 @@ function getSimulatedStats() {
   };
 }
 
-// ── 로그매니저 안전 래퍼 ──
-function safeGetStats() {
+// ── 로그매니저 안전 래퍼 (async) ──
+const { logManager } = require('../loop/log-manager');
+
+const SIM_TOP10 = [
+  { id:1,  pattern:'배송 소요일 문의',  count:12, first_seen:'2026-04-01', last_seen:'2026-05-01', resolved:1 },
+  { id:2,  pattern:'성분 부작용 문의',  count: 9, first_seen:'2026-04-03', last_seen:'2026-05-02', resolved:1 },
+  { id:3,  pattern:'VIP 할인 중복',     count: 7, first_seen:'2026-04-05', last_seen:'2026-05-03', resolved:1 },
+  { id:4,  pattern:'개봉 후 교환 기간', count: 6, first_seen:'2026-04-08', last_seen:'2026-05-04', resolved:1 },
+  { id:5,  pattern:'해외 배송 국가',    count: 5, first_seen:'2026-04-10', last_seen:'2026-05-05', resolved:0 },
+  { id:6,  pattern:'정기 구독 해지',    count: 5, first_seen:'2026-04-12', last_seen:'2026-05-06', resolved:0 },
+  { id:7,  pattern:'민감성 피부 추천',  count: 4, first_seen:'2026-04-15', last_seen:'2026-05-07', resolved:0 },
+  { id:8,  pattern:'재입고 알림 신청',  count: 4, first_seen:'2026-04-18', last_seen:'2026-05-08', resolved:0 },
+  { id:9,  pattern:'샘플 증정 기준',    count: 3, first_seen:'2026-04-20', last_seen:'2026-05-09', resolved:0 },
+  { id:10, pattern:'첫구매+VIP 중복',   count: 3, first_seen:'2026-04-22', last_seen:'2026-05-10', resolved:0 },
+];
+
+async function safeGetStats() {
   try {
-    const { logManager } = require('../loop/log-manager');
-    return logManager.getMonthlyStats();
+    const stats = await logManager.getMonthlyStats();
+    if (stats) return stats;
   } catch (e) {
-    logger.warn('LogManager 미사용 — 시뮬레이션 데이터 반환', e.message);
-    return getSimulatedStats();
+    logger.warn('LogManager 오류 — 시뮬레이션 반환', e.message);
   }
+  return getSimulatedStats();
 }
 
-function safeGetTop10(days) {
+async function safeGetTop10(days) {
   try {
-    const { logManager } = require('../loop/log-manager');
-    return logManager.getUnresolvedTop10(days);
+    const rows = await logManager.getUnresolvedTop10(days);
+    if (rows.length > 0) return rows;
   } catch (e) {
-    return [
-      { id: 1, pattern: '배송 소요일 문의',   count: 12, first_seen: '2026-04-01', last_seen: '2026-05-01', resolved: 1, faq: 'Q07' },
-      { id: 2, pattern: '성분 부작용 문의',   count:  9, first_seen: '2026-04-03', last_seen: '2026-05-02', resolved: 1, faq: 'Q29' },
-      { id: 3, pattern: 'VIP 할인 중복',      count:  7, first_seen: '2026-04-05', last_seen: '2026-05-03', resolved: 1, faq: 'Q05' },
-      { id: 4, pattern: '개봉 후 교환 기간',  count:  6, first_seen: '2026-04-08', last_seen: '2026-05-04', resolved: 1, faq: 'Q15' },
-      { id: 5, pattern: '해외 배송 국가',     count:  5, first_seen: '2026-04-10', last_seen: '2026-05-05', resolved: 0, faq: 'Q09' },
-      { id: 6, pattern: '정기 구독 해지',     count:  5, first_seen: '2026-04-12', last_seen: '2026-05-06', resolved: 0, faq: 'Q02' },
-      { id: 7, pattern: '민감성 피부 추천',   count:  4, first_seen: '2026-04-15', last_seen: '2026-05-07', resolved: 0, faq: 'Q33' },
-      { id: 8, pattern: '재입고 알림 신청',   count:  4, first_seen: '2026-04-18', last_seen: '2026-05-08', resolved: 0, faq: '신규' },
-      { id: 9, pattern: '샘플 증정 기준',     count:  3, first_seen: '2026-04-20', last_seen: '2026-05-09', resolved: 0, faq: 'Q36' },
-      { id: 10,pattern: '첫구매+VIP 중복',   count:  3, first_seen: '2026-04-22', last_seen: '2026-05-10', resolved: 0, faq: 'Q05' },
-    ];
+    logger.warn('Top10 조회 오류 — 시뮬레이션 반환', e.message);
   }
+  return SIM_TOP10;
 }
 
 // ═══════════════════════════════════════════
@@ -136,19 +141,18 @@ function safeGetTop10(days) {
 // ═══════════════════════════════════════════
 router.get('/dashboard', async (req, res) => {
   try {
-    const stats  = safeGetStats();
-    const engine = searchEngine.getStats();
-    const top10  = safeGetTop10(30);
+    const [stats, top10] = await Promise.all([safeGetStats(), safeGetTop10(30)]);
+    const engine   = searchEngine.getStats();
     const avgScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
 
     res.json({
       kpi: {
-        totalMessages: stats.totalMessages || 487,
-        resolveRate:   stats.resolveRate   || '80.9%',
+        totalMessages: stats.totalMessages || 0,
+        resolveRate:   stats.resolveRate   || '0%',
         nps:           44,
         avgScore:      avgScore.toFixed(1),
         kbCount:       faqStore.length + POLICY_DATA.length,
-        escalated:     stats.escalated || 73,
+        escalated:     stats.escalated || 0,
       },
       engine,
       recentTop5:  top10.slice(0, 5),
@@ -164,11 +168,10 @@ router.get('/dashboard', async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /admin/api/stats — 운영 통계 전체
 // ═══════════════════════════════════════════
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const stats = safeGetStats();
-    const full  = { ...getSimulatedStats(), ...stats };
-    res.json(full);
+    const stats = await safeGetStats();
+    res.json({ ...getSimulatedStats(), ...stats });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -194,16 +197,15 @@ router.get('/engine', (req, res) => {
 // GET  /admin/api/top10 — P4 미해결 Top10
 // PATCH /admin/api/top10/:id — 해결 표시
 // ═══════════════════════════════════════════
-router.get('/top10', (req, res) => {
+router.get('/top10', async (req, res) => {
   const days = parseInt(req.query.days) || 30;
-  const data = safeGetTop10(days);
+  const data = await safeGetTop10(days);
   res.json({ period: `최근 ${days}일`, count: data.length, patterns: data });
 });
 
-router.patch('/top10/:id', (req, res) => {
+router.patch('/top10/:id', async (req, res) => {
   try {
-    const { logManager } = require('../loop/log-manager');
-    logManager.markResolved(req.params.id);
+    await logManager.markResolved(req.params.id);
   } catch (e) { /* DB 미연결 시 무시 */ }
   res.json({ result: 'ok', id: req.params.id });
 });
@@ -415,38 +417,21 @@ router.post('/chat/test', async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /admin/api/logs — 최근 대화 로그
 // ═══════════════════════════════════════════
-router.get('/logs', (req, res) => {
-  const limit  = Math.min(parseInt(req.query.limit) || 50, 200);
-  const offset = parseInt(req.query.offset) || 0;
-  const channel = req.query.channel;  // 'kakao' | 'email' | undefined
+router.get('/logs', async (req, res) => {
+  const limit   = Math.min(parseInt(req.query.limit)  || 50, 200);
+  const offset  = parseInt(req.query.offset) || 0;
+  const channel = req.query.channel;
 
   try {
-    const { logManager } = require('../loop/log-manager');
-
-    let sql  = 'SELECT * FROM chat_logs';
-    const params = [];
-    if (channel) { sql += ' WHERE channel = ?'; params.push(channel); }
-    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-
-    const logs  = logManager.db.prepare(sql).all(...params);
-    const total = logManager.db.prepare(
-      channel ? 'SELECT COUNT(*) as c FROM chat_logs WHERE channel = ?' : 'SELECT COUNT(*) as c FROM chat_logs'
-    ).get(...(channel ? [channel] : [])).c;
-
-    return res.json({ total, count: logs.length, offset, logs, source: 'sqlite' });
+    const { rows, total } = await logManager.getLogs({ limit, offset, channel });
+    if (rows.length > 0 || total > 0) {
+      return res.json({ total, count: rows.length, offset, logs: rows, source: 'postgresql' });
+    }
   } catch (e) {
-    logger.warn('logs API — SQLite 미연결, 시뮬레이션 반환:', e.message);
+    logger.warn('logs API — PostgreSQL 오류, 빈 결과 반환:', e.message);
   }
 
-  // SQLite 미연결 시 시뮬레이션 폴백
-  const simLogs = [
-    { id:1, channel:'kakao', input:'환불 가능한가요?',       situation:'정상_응답',    search_score:0.85, resolved:1, source:'FAQ §Q13', created_at: new Date(Date.now()-5*60000).toISOString() },
-    { id:2, channel:'kakao', input:'피부 발진 났어요',        situation:'피부_부작용',  search_score:0.91, resolved:1, source:'FAQ §Q29', created_at: new Date(Date.now()-18*60000).toISOString() },
-    { id:3, channel:'kakao', input:'리콜 제품 확인해주세요',  situation:'리콜_정품',    search_score:0.78, resolved:1, source:'FAQ §Q42', created_at: new Date(Date.now()-25*60000).toISOString() },
-    { id:4, channel:'kakao', input:'화가 너무 나요',          situation:'감정_격화',    search_score:0.0,  resolved:0, source:null,       created_at: new Date(Date.now()-55*60000).toISOString() },
-  ];
-  res.json({ total: simLogs.length, count: simLogs.length, offset: 0, logs: simLogs, source: 'simulation' });
+  res.json({ total: 0, count: 0, offset: 0, logs: [], source: 'postgresql', message: '아직 대화 기록이 없습니다.' });
 });
 
 module.exports = router;

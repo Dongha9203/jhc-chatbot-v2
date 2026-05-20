@@ -88,15 +88,15 @@ app.post('/webhook/kakao', async (req, res) => {
 // ── 관리자 API ──
 
 // 운영 통계
-app.get('/admin/stats', (req, res) => {
-  const stats = logManager.getMonthlyStats();
+app.get('/admin/stats', async (req, res) => {
+  const stats = await logManager.getMonthlyStats();
   res.json(stats);
 });
 
 // 미해결 Top10 (P4 폐곡선 월간 SOP)
-app.get('/admin/top10', (req, res) => {
+app.get('/admin/top10', async (req, res) => {
   const days = parseInt(req.query.days) || 30;
-  const top10 = logManager.getUnresolvedTop10(days);
+  const top10 = await logManager.getUnresolvedTop10(days);
   res.json({
     period:   `최근 ${days}일`,
     count:    top10.length,
@@ -106,8 +106,8 @@ app.get('/admin/top10', (req, res) => {
 });
 
 // 미해결 패턴 해결 표시
-app.patch('/admin/top10/:id/resolve', (req, res) => {
-  logManager.markResolved(req.params.id);
+app.patch('/admin/top10/:id/resolve', async (req, res) => {
+  await logManager.markResolved(req.params.id);
   res.json({ result: 'ok', message: 'KB 갱신 후 해결 표시 완료' });
 });
 

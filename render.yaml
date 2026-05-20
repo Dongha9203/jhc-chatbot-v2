@@ -25,6 +25,8 @@ services:
         value: "2.0"
       - key: CACHE_TTL
         value: "300"
+      - key: DATABASE_URL
+        sync: false
       - key: KAKAO_CHANNEL_ID
         sync: false
       - key: KAKAO_CHANNEL_SECRET
