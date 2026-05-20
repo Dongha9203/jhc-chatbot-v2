@@ -2,16 +2,19 @@
 
 /**
  * JHC Honey 챗봇 Express 서버
- * - POST /webhook/kakao  — 카카오톡 Webhook 수신
- * - GET  /health         — 헬스 체크
- * - GET  /admin/stats    — 운영 통계
- * - GET  /admin/top10    — 미해결 Top10 (P4 폐곡선)
- * - POST /admin/chat     — CLI 테스트
+ * - POST /webhook/kakao      — 카카오톡 Webhook 수신
+ * - GET  /health             — 헬스 체크
+ * - GET  /admin              — 관리자 대시보드 UI
+ * - /admin/api/*             — 대시보드 API (admin-router.js)
+ * - GET  /admin/stats        — 운영 통계 (레거시 호환)
+ * - GET  /admin/top10        — 미해결 Top10 (레거시 호환)
+ * - POST /admin/chat         — CLI 테스트 (레거시 호환)
  */
 
 const express    = require('express');
 const cors       = require('cors');
 const helmet     = require('helmet');
+const path       = require('path');
 const rateLimit  = require('express-rate-limit');
 const settings   = require('../../config/settings');
 const { webhookHandler } = require('../kakao/webhook-handler');
@@ -19,11 +22,15 @@ const { chatPipeline }   = require('../engine/chat-pipeline');
 const { logManager }     = require('../loop/log-manager');
 const { searchEngine }   = require('../engine/tfidf-search');
 const { logger }         = require('../utils/logger');
+const adminRouter        = require('./admin-router');
 
 const app = express();
 
+// ── 정적 파일 (관리자 대시보드 HTML) ──
+app.use(express.static(path.join(__dirname, '../../public')));
+
 // ── 미들웨어 ──
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 
 // Raw body 저장 (카카오 서명 검증용)
@@ -56,6 +63,14 @@ app.get('/health', async (req, res) => {
     time:    new Date().toISOString(),
   });
 });
+
+// ── 관리자 대시보드 진입점 ──
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/admin.html'));
+});
+
+// ── 대시보드 API 라우터 ──
+app.use('/admin/api', adminRouter);
 
 // ── 카카오톡 Webhook ──
 app.post('/webhook/kakao', async (req, res) => {
@@ -137,7 +152,8 @@ async function startServer() {
     logger.info(`환경: ${settings.server.env}`);
     logger.info(`검색 엔진: ${searchEngine.getStats().mode}`);
     logger.info(`Webhook: POST /webhook/kakao`);
-    logger.info(`관리자: GET /admin/stats`);
+    logger.info(`대시보드: GET /admin`);
+    logger.info(`관리자 API: /admin/api/*`);
   });
 }
 
