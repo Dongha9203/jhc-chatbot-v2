@@ -1,0 +1,7 @@
+node_modules/
+config/.env
+logs/*.log
+logs/unresolved.json
+data/
+.playwright-mcp/
+*.db

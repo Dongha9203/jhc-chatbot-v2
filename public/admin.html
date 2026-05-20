@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JHC Honey 관리자 대시보드</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍯</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Montserrat:wght@700;900&display=swap');
+:root{
+  --primary:#1B5FA8;--primary-d:#0E3F75;--primary-l:#3A7EC8;
+  --accent:#00C4B4;--accent2:#FF6B35;
+  --navy:#0A1628;--navy2:#0D2144;
+  --sky:#E8F4FF;--white:#fff;
+  --gray1:#F5F7FA;--gray2:#E2E8F0;--gray3:#94A3B8;--gray4:#64748B;
+  --dark:#1E293B;--text:#334155;
+  --green:#10B981;--yellow:#F59E0B;--red:#EF4444;--purple:#6366F1;
+  --radius:12px;--radius-lg:20px;
+  --shadow:0 4px 24px rgba(27,95,168,.12);--shadow-lg:0 12px 48px rgba(27,95,168,.18);
+  --sb:240px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:'Noto Sans KR',sans-serif;color:var(--text);background:var(--gray1);display:flex;min-height:100vh;font-size:14px;}
+
+/* ── SIDEBAR ── */
+.sb{width:var(--sb);min-width:var(--sb);background:var(--navy);position:fixed;top:0;left:0;height:100vh;z-index:200;display:flex;flex-direction:column;transition:transform .3s;}
+.sb-logo{padding:18px 20px 14px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px;}
+.logo-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;font-family:Montserrat;font-weight:900;color:#fff;font-size:13px;flex-shrink:0;}
+.logo-txt{font-size:13px;font-weight:900;color:#fff;line-height:1.3;}
+.logo-sub{font-size:10px;color:rgba(255,255,255,.35);display:block;}
+.sb-nav{flex:1;padding:8px 0;overflow-y:auto;}
+.nav-grp-label{font-size:10px;font-weight:700;letter-spacing:.08em;color:rgba(255,255,255,.28);text-transform:uppercase;padding:10px 20px 3px;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 20px;color:rgba(255,255,255,.5);font-size:13px;font-weight:500;border-left:3px solid transparent;cursor:pointer;transition:all .15s;text-decoration:none;}
+.nav-item:hover{color:#fff;background:rgba(255,255,255,.05);}
+.nav-item.active{color:#fff;background:rgba(27,95,168,.28);border-left-color:var(--accent);}
+.nav-icon{font-size:15px;min-width:18px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--accent2);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:9px;}
+.nav-badge.green{background:var(--green);}
+.nav-badge.yellow{background:var(--yellow);}
+.sb-foot{padding:12px 20px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:rgba(255,255,255,.3);}
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:5px;animation:pulse 1.8s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4);}50%{box-shadow:0 0 0 5px rgba(16,185,129,0);}}
+
+/* ── MAIN ── */
+.main{margin-left:var(--sb);flex:1;display:flex;flex-direction:column;}
+
+/* ── TOPBAR ── */
+.topbar{background:#fff;border-bottom:1px solid var(--gray2);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.tb-title{font-size:17px;font-weight:900;color:var(--dark);}
+.tb-sub{font-size:11px;color:var(--gray4);margin-top:1px;}
+.tb-actions{display:flex;align-items:center;gap:10px;}
+.tb-time{font-size:11px;color:var(--gray4);}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all .18s;font-family:inherit;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-d);}
+.btn-outline{background:transparent;color:var(--primary);border:2px solid var(--primary);}
+.btn-outline:hover{background:var(--sky);}
+.btn-success{background:var(--green);color:#fff;}
+.btn-success:hover{background:#059669;}
+.btn-warn{background:var(--yellow);color:#fff;}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-ghost{background:var(--gray1);color:var(--dark);border:1px solid var(--gray2);}
+.btn-ghost:hover{background:var(--sky);}
+.btn-sm{padding:5px 10px;font-size:11px;}
+
+/* ── PAGES ── */
+.page{display:none;padding:24px;}
+.page.active{display:block;}
+
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+.kpi-card{background:#fff;border-radius:var(--radius);border:1px solid var(--gray2);padding:18px 20px;position:relative;overflow:hidden;transition:all .22s;cursor:default;}
+.kpi-card:hover{transform:translateY(-3px);box-shadow:var(--shadow);}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.kpi-card.blue::before{background:var(--primary);}
+.kpi-card.teal::before{background:var(--accent);}
+.kpi-card.orange::before{background:var(--accent2);}
+.kpi-card.green::before{background:var(--green);}
+.kpi-card.yellow::before{background:var(--yellow);}
+.kpi-card.purple::before{background:var(--purple);}
+.kpi-label{font-size:11px;color:var(--gray4);font-weight:600;margin-bottom:5px;}
+.kpi-val{font-family:Montserrat;font-size:34px;font-weight:900;line-height:1;margin-bottom:3px;}
+.kpi-val.blue{color:var(--primary);}.kpi-val.teal{color:var(--accent);}
+.kpi-val.orange{color:var(--accent2);}.kpi-val.green{color:var(--green);}
+.kpi-val.yellow{color:var(--yellow);}.kpi-val.purple{color:var(--purple);}
+.kpi-trend{font-size:11px;color:var(--gray4);}
+.kpi-trend.up{color:var(--green);}.kpi-trend.dn{color:var(--red);}
+
+/* ── CARD ── */
+.card{background:#fff;border-radius:var(--radius);border:1px solid var(--gray2);padding:20px;transition:box-shadow .22s;margin-bottom:16px;}
+.card:hover{box-shadow:var(--shadow);}
+.card-title{font-size:14px;font-weight:700;color:var(--dark);margin-bottom:14px;display:flex;align-items:center;gap:7px;}
+.card-icon{font-size:16px;}
+
+/* ── GRIDS ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+.grid-7-3{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{background:var(--navy);color:#fff;padding:9px 12px;text-align:left;font-weight:700;font-size:11px;white-space:nowrap;}
+th:first-child{border-radius:8px 0 0 0;}
+th:last-child{border-radius:0 8px 0 0;}
+td{padding:9px 12px;border-bottom:1px solid var(--gray2);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--sky);}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:14px;font-size:10px;font-weight:700;}
+.badge.ok{background:rgba(16,185,129,.1);color:var(--green);}
+.badge.warn{background:rgba(245,158,11,.1);color:var(--yellow);}
+.badge.alert{background:rgba(239,68,68,.1);color:var(--red);}
+.badge.info{background:var(--sky);color:var(--primary);}
+.badge.purple{background:rgba(99,102,241,.1);color:var(--purple);}
+
+/* ── PROGRESS ── */
+.prog-wrap{margin-bottom:11px;}
+.prog-label{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;}
+.prog-bar{height:7px;background:var(--gray2);border-radius:4px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:4px;transition:width 1.2s cubic-bezier(.4,0,.2,1);}
+
+/* ── PIPELINE ── */
+.pipeline{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin:12px 0;}
+.pipe-step{flex:1;min-width:100px;background:var(--gray1);border:1px solid var(--gray2);border-radius:10px;padding:12px 10px;text-align:center;transition:all .2s;cursor:pointer;}
+.pipe-step:hover{background:var(--sky);border-color:var(--primary);}
+.pipe-icon{font-size:20px;margin-bottom:5px;}
+.pipe-name{font-size:11px;font-weight:700;color:var(--dark);margin-bottom:2px;}
+.pipe-detail{font-size:10px;color:var(--gray4);margin-bottom:4px;}
+.pipe-badge{display:inline-block;font-family:Montserrat;font-size:12px;font-weight:900;padding:2px 7px;border-radius:5px;}
+.pipe-badge.high{background:rgba(16,185,129,.12);color:var(--green);}
+.pipe-badge.mid{background:rgba(245,158,11,.12);color:var(--yellow);}
+.pipe-badge.low{background:rgba(239,68,68,.12);color:var(--red);}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;}
+.overlay.open{display:flex;}
+.modal{background:#fff;border-radius:var(--radius-lg);width:620px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);}
+.modal-hd{padding:18px 22px;border-bottom:1px solid var(--gray2);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:15px;font-weight:900;color:var(--dark);}
+.modal-close{width:30px;height:30px;border-radius:7px;border:none;background:var(--gray1);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
+.modal-close:hover{background:var(--gray2);}
+.modal-body{padding:20px 22px;}
+.modal-foot{padding:14px 22px;border-top:1px solid var(--gray2);display:flex;justify-content:flex-end;gap:8px;}
+
+/* ── FORM ── */
+.fg{margin-bottom:14px;}
+.fg label{display:block;font-size:12px;font-weight:700;color:var(--dark);margin-bottom:5px;}
+.fi{width:100%;padding:9px 12px;border:1px solid var(--gray2);border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border .18s;}
+.fi:focus{border-color:var(--primary);}
+.fi-ta{min-height:90px;resize:vertical;}
+.fi-sel{width:100%;background:#fff;cursor:pointer;}
+.tag-wrap{border:1px solid var(--gray2);border-radius:8px;padding:6px;min-height:40px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
+.tag-chip{display:inline-flex;align-items:center;gap:3px;background:var(--sky);color:var(--primary);padding:2px 8px;border-radius:14px;font-size:11px;font-weight:600;}
+.tag-chip button{background:none;border:none;cursor:pointer;color:var(--primary);font-size:11px;padding:0;line-height:1;}
+.tag-inp{border:none;outline:none;font-size:12px;min-width:70px;font-family:inherit;}
+.toggle{position:relative;display:inline-block;width:40px;height:22px;}
+.toggle input{opacity:0;width:0;height:0;}
+.tgl-slider{position:absolute;inset:0;background:var(--gray2);border-radius:22px;cursor:pointer;transition:.3s;}
+.tgl-slider::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;bottom:3px;left:3px;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.toggle input:checked+.tgl-slider{background:var(--accent);}
+.toggle input:checked+.tgl-slider::before{transform:translateX(18px);}
+
+/* ── CHAT TEST ── */
+.chat-box{background:var(--gray1);border-radius:var(--radius);overflow:hidden;}
+.chat-msgs{padding:16px;height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}
+.msg-bot{background:#fff;border:1px solid var(--gray2);border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.6;max-width:86%;align-self:flex-start;}
+.msg-user{background:var(--primary);color:#fff;border-radius:12px;padding:9px 13px;font-size:13px;align-self:flex-end;max-width:86%;}
+.msg-src{font-size:10px;color:var(--gray3);margin-top:2px;align-self:flex-start;}
+.chat-inp-row{padding:10px 12px;border-top:1px solid var(--gray2);display:flex;gap:8px;}
+.chat-inp{flex:1;border:1px solid var(--gray2);border-radius:8px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;}
+.chat-inp:focus{border-color:var(--primary);}
+.chat-send{width:38px;height:38px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
+.chat-send:hover{background:var(--primary-d);}
+.shortcut-row{padding:6px 12px 10px;display:flex;gap:6px;flex-wrap:wrap;}
+.shortcut{font-size:11px;padding:4px 9px;border-radius:14px;background:var(--sky);color:var(--primary);font-weight:600;cursor:pointer;border:none;font-family:inherit;}
+.shortcut:hover{background:var(--primary);color:#fff;}
+
+/* ── EVAL CARD ── */
+.eval-card{display:flex;gap:12px;padding:12px;background:var(--gray1);border-radius:10px;margin-bottom:9px;}
+.eval-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0;}
+.eval-name{font-size:13px;font-weight:700;color:var(--dark);}
+.eval-meta{font-size:11px;color:var(--gray4);}
+.eval-text{font-size:12px;color:var(--text);line-height:1.6;margin-top:3px;}
+.eval-src{font-size:11px;color:var(--primary);margin-top:2px;}
+.stars{color:#F59E0B;font-size:13px;letter-spacing:1px;}
+
+/* ── NOTIF ── */
+.notif{position:fixed;bottom:22px;right:22px;z-index:9999;background:var(--dark);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);transform:translateY(60px);opacity:0;transition:all .3s;display:flex;align-items:center;gap:7px;max-width:300px;}
+.notif.show{transform:translateY(0);opacity:1;}
+.notif.success{background:var(--green);}
+.notif.error{background:var(--red);}
+.notif.warn{background:var(--yellow);color:var(--dark);}
+
+/* ── LOADING ── */
+.loading{text-align:center;padding:40px;color:var(--gray4);font-size:13px;}
+.spin{display:inline-block;width:20px;height:20px;border:2px solid var(--gray2);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── SVG 차트 공통 ── */
+.chart-wrap{background:var(--gray1);border-radius:10px;padding:14px;}
+
+@media(max-width:900px){
+  .sb{transform:translateX(-100%);}
+  .main{margin-left:0;}
+  .kpi-grid{grid-template-columns:repeat(2,1fr);}
+  .grid-2,.grid-3,.grid-7-3{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ── -->
+<aside class="sb" id="sidebar">
+  <div class="sb-logo">
+    <div class="logo-mark">JH</div>
+    <div>
+      <div class="logo-txt">Honey 관리자</div>
+      <span class="logo-sub">jhc-chatbot-v2 인터페이스</span>
+    </div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-grp-label">메인</div>
+    <a class="nav-item active" data-page="dashboard"><span class="nav-icon">📊</span>대시보드</a>
+
+    <div class="nav-grp-label">P1~P5 파이프라인</div>
+    <a class="nav-item" data-page="p1"><span class="nav-icon">🔍</span>P1 · KB 진단</a>
+    <a class="nav-item" data-page="p2"><span class="nav-icon">⚙️</span>P2 · RAG 엔진</a>
+    <a class="nav-item" data-page="p3"><span class="nav-icon">🎨</span>P3 · 3톤 분리</a>
+    <a class="nav-item" data-page="p4"><span class="nav-icon">🔄</span>P4 · 폐곡선</a>
+    <a class="nav-item" data-page="p5"><span class="nav-icon">🛡️</span>P5 · 컴플라이언스</a>
+
+    <div class="nav-grp-label">KB 관리</div>
+    <a class="nav-item" data-page="faq-kb"><span class="nav-icon">📚</span>FAQ KB 편집<span class="nav-badge green" id="sbFaqCount">50</span></a>
+    <a class="nav-item" data-page="kb-status"><span class="nav-icon">🔃</span>KB 갱신 현황</a>
+
+    <div class="nav-grp-label">통계 · 평가</div>
+    <a class="nav-item" data-page="stats"><span class="nav-icon">📈</span>운영 통계</a>
+    <a class="nav-item" data-page="evaluation"><span class="nav-icon">⭐</span>평가 결과</a>
+    <a class="nav-item" data-page="top10"><span class="nav-icon">❗</span>미해결 Top10<span class="nav-badge yellow" id="sbTop10">6</span></a>
+
+    <div class="nav-grp-label">개발 도구</div>
+    <a class="nav-item" data-page="chat-test"><span class="nav-icon">💬</span>챗봇 테스트</a>
+    <a class="nav-item" data-page="logs"><span class="nav-icon">📋</span>대화 로그</a>
+    <a class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span>시스템 설정</a>
+  </nav>
+  <div class="sb-foot"><span class="live-dot"></span>Honey v2.0 운영중 · <span id="engineMode">TF-IDF</span></div>
+</aside>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div>
+    <div class="tb-title" id="pageTitle">대시보드</div>
+    <div class="tb-sub" id="pageSub">jhc-chatbot-v2 실시간 인터페이스</div>
+  </div>
+  <div class="tb-actions">
+    <span class="tb-time" id="nowTime"></span>
+    <button class="btn btn-ghost" onclick="refreshAll()">🔄 새로고침</button>
+    <button class="btn btn-primary" onclick="goPage('faq-kb')">✏️ KB 편집</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: DASHBOARD
+══════════════════════════════ -->
+<div class="page active" id="page-dashboard">
+  <div class="kpi-grid" id="dashKpi">
+    <div class="loading"><span class="spin"></span>로딩중...</div>
+  </div>
+
+  <!-- 파이프라인 현황 -->
+  <div class="card">
+    <div class="card-title"><span class="card-icon">⚡</span>P1~P5 파이프라인 현황 <small style="color:var(--gray4);font-weight:400;font-size:11px;margin-left:auto;">클릭 시 상세 페이지로 이동</small></div>
+    <div class="pipeline" id="dashPipeline">
+      <div class="loading"><span class="spin"></span></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📈</span>월간 응답 추이</div>
+      <div class="chart-wrap"><svg id="trendChart" viewBox="0 0 600 180" style="width:100%;display:block;"></svg></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🍩</span>문의 카테고리 분포</div>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <svg id="donutChart" viewBox="0 0 120 120" width="110" style="flex-shrink:0;"></svg>
+        <div id="donutLegend" style="flex:1;font-size:11px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">❗</span>미해결 Top5</div>
+      <div id="dashTop5"><div class="loading"><span class="spin"></span></div></div>
+      <button class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="goPage('top10')">전체 보기 →</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">⭐</span>최근 고객 평가</div>
+      <div id="dashEval"><div class="loading"><span class="spin"></span></div></div>
+      <button class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="goPage('evaluation')">전체 보기 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: P1 KB 진단
+══════════════════════════════ -->
+<div class="page" id="page-p1">
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">D · 문서 정제</div><div class="kpi-val blue" id="p1d">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">R · RAG 검색</div><div class="kpi-val teal" id="p1r">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">T · 3톤 분리</div><div class="kpi-val orange" id="p1t">1.5</div><div class="kpi-trend">/2.0 · 목표 2.0</div></div>
+    <div class="kpi-card green"><div class="kpi-label">L · 폐곡선</div><div class="kpi-val green" id="p1l">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📊</span>변수별 점수 (FAQ 반영 후)</div>
+      <div id="p1Progress"></div>
+      <div style="margin-top:14px;padding:12px;background:var(--sky);border-radius:8px;">
+        <strong style="color:var(--primary)">총점: <span id="p1Total">4.5</span> / 8.0</strong>
+        <div style="font-size:11px;color:var(--gray4);margin-top:3px;">기존 2.5 → FAQ 반영 후 4.5점 · 목표 6.0 (2026 Q4)</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🔬</span>Argyris Double-Loop 진단</div>
+      <div style="padding:12px;background:#FFF8E1;border-radius:8px;border-left:3px solid var(--yellow);margin-bottom:12px;">
+        <strong style="color:#92400E;">Single-Loop 전환 진행중</strong>
+        <p style="font-size:11px;color:#92400E;margin-top:4px;">정확도 81% 확보·KB 갱신 40%로 Double-Loop 전환 조건 미충족. 2026 Q2 KB 완료+NPS 측정 시 전환 가능.</p>
+      </div>
+      <div class="card-title" style="margin-top:4px;"><span class="card-icon">📅</span>다음 진단 일정</div>
+      <div style="font-size:12px;color:var(--text);display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:8px 10px;background:rgba(16,185,129,.06);border-radius:7px;border-left:3px solid var(--green);">✅ 2026.01 — P1 KB 진단 갱신 완료</div>
+        <div style="padding:8px 10px;background:rgba(27,95,168,.06);border-radius:7px;border-left:3px solid var(--primary);animation:pulse 2s infinite;">🔵 2026.02 — P3 톤 갱신 (진행중)</div>
+        <div style="padding:8px 10px;background:var(--gray1);border-radius:7px;border-left:3px solid var(--gray2);">⬜ 2026.03 마지막주 — P2+P4 Q1 분기 점검</div>
+        <div style="padding:8px 10px;background:var(--gray1);border-radius:7px;border-left:3px solid var(--gray2);">⬜ 2026.04 1주차 — P5 Q1 분기 패키지</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: P2 RAG 엔진
+══════════════════════════════ -->
+<div class="page" id="page-p2">
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">🎯 응답 정확도</div><div class="kpi-val blue" id="p2acc">—</div><div class="kpi-trend">목표 93%</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">📚 KB 문서 수</div><div class="kpi-val teal" id="p2docs">—</div><div class="kpi-trend">어휘 <span id="p2vocab">—</span>개</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">⚠️ 환각 발생률</div><div class="kpi-val orange">5%</div><div class="kpi-trend">목표 2%</div></div>
+    <div class="kpi-card green"><div class="kpi-label">⚡ 평균 응답</div><div class="kpi-val green" style="font-size:22px;" id="p2ms">—</div><div class="kpi-trend">인메모리 TF-IDF</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🔍</span>검색 엔진 상태 (실시간)</div>
+      <div id="engineStatus"><div class="loading"><span class="spin"></span></div></div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn btn-primary btn-sm" onclick="reindexKB()">🔃 KB 재인덱싱</button>
+        <button class="btn btn-ghost btn-sm" onclick="fetchEngine()">🔄 상태 새로고침</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🛡️</span>함정 3종 차단 현황 (이번달)</div>
+      <div id="trapStats"><div class="loading"><span class="spin"></span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: P3 3톤 분리
+══════════════════════════════ -->
+<div class="page" id="page-p3">
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">📩 이번달 총 응답</div><div class="kpi-val blue">487</div><div class="kpi-trend">카카오+이메일</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">🤗 공감톤</div><div class="kpi-val teal">62%</div><div class="kpi-trend">302건</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">🔄 거절톤</div><div class="kpi-val orange">23%</div><div class="kpi-trend">112건</div></div>
+    <div class="kpi-card green"><div class="kpi-label">📞 에스컬레이션</div><div class="kpi-val green">15%</div><div class="kpi-trend">73건</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🗂️</span>12상황 분류 분포</div>
+      <div id="p3Situations"><div class="loading"><span class="spin"></span></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🎛️</span>톤 설정 관리</div>
+      <div id="toneSettings" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="showNotif('톤 설정 저장 완료! 🎨','success')">설정 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: P4 폐곡선
+══════════════════════════════ -->
+<div class="page" id="page-p4">
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">✅ 갱신 완료</div><div class="kpi-val blue" id="p4done">4</div><div class="kpi-trend">건</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">⬜ 갱신 예정</div><div class="kpi-val yellow" id="p4todo">6</div><div class="kpi-trend">건</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">📅 다음 SOP 미팅</div><div class="kpi-val teal" style="font-size:18px;">6월 3일</div><div class="kpi-trend">화요일 14:00</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">🔄 Argyris 상태</div><div class="kpi-val orange" style="font-size:16px;">전환중</div><div class="kpi-trend">Single→Double Loop</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-icon">🔄</span>월간 폐곡선 SOP 단계</div>
+    <div class="pipeline">
+      <div class="pipe-step"><div class="pipe-icon">📊</div><div class="pipe-name">로그 추출</div><div class="pipe-detail">이메일·카카오</div><div class="pipe-badge high">완료</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🔍</div><div class="pipe-name">Top10 분류</div><div class="pipe-detail">4유형 자동</div><div class="pipe-badge high">완료</div></div>
+      <div class="pipe-step"><div class="pipe-icon">📝</div><div class="pipe-name">KB 갱신</div><div class="pipe-detail">4건 완료</div><div class="pipe-badge mid">진행중</div></div>
+      <div class="pipe-step"><div class="pipe-icon">🗄️</div><div class="pipe-name">ChromaDB 반영</div><div class="pipe-detail">소스 추가</div><div class="pipe-badge low">대기</div></div>
+      <div class="pipe-step"><div class="pipe-icon">✅</div><div class="pipe-name">효과 검증</div><div class="pipe-detail">감소 확인</div><div class="pipe-badge low">대기</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-icon">❗</span>미해결 패턴 Top10 — API 직접 조회</div>
+    <div id="p4Top10"><div class="loading"><span class="spin"></span></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: P5 컴플라이언스
+══════════════════════════════ -->
+<div class="page" id="page-p5">
+  <div class="kpi-grid">
+    <div class="kpi-card green"><div class="kpi-label">✅ 정상</div><div class="kpi-val green">4건</div><div class="kpi-trend"></div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">🔄 시정중</div><div class="kpi-val yellow">2건</div><div class="kpi-trend"></div></div>
+    <div class="kpi-card teal"><div class="kpi-label">🌿 화장품법</div><div class="kpi-val teal">4건</div><div class="kpi-trend">전항목 반영</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">📐 COSO ERM</div><div class="kpi-val blue" style="font-size:18px;">부분구축</div><div class="kpi-trend">준법·보고 미흡</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-icon">🛡️</span>6항목 컴플라이언스 점검 현황</div>
+    <div id="complianceTable"><div class="loading"><span class="spin"></span></div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🌿</span>화장품법 특화 4개 항목</div>
+      <div id="cosmLawTable"><div class="loading"><span class="spin"></span></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📐</span>COSO ERM 4범주</div>
+      <div id="cosoTable"><div class="loading"><span class="spin"></span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: FAQ KB 편집
+══════════════════════════════ -->
+<div class="page" id="page-faq-kb">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <input class="fi" style="flex:1;min-width:180px;" placeholder="🔍 질문·키워드·답변 검색" id="faqSearch" oninput="fetchFaq()">
+      <select class="fi fi-sel" style="width:130px;" id="faqCatFilter" onchange="fetchFaq()">
+        <option value="">전체 분류</option>
+        <option>주문·결제</option><option>배송</option><option>교환·환불</option>
+        <option>제품·성분</option><option>피부 트러블</option><option>회원·혜택</option>
+        <option>안전·법규</option><option>채널·서비스</option>
+      </select>
+      <button class="btn btn-success" onclick="openFaqModal()">+ FAQ 추가</button>
+      <button class="btn btn-ghost" onclick="reindexKB()">🔃 재인덱싱</button>
+      <span style="margin-left:auto;font-size:12px;color:var(--gray4);">총 <strong id="faqTotalLabel" style="color:var(--primary)">—</strong>건</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th style="width:58px;">번호</th><th style="width:90px;">분류</th><th>질문</th><th style="width:120px;">키워드</th><th style="width:80px;">관련법규</th><th style="width:55px;">에스컬</th><th style="width:85px;">관리</th></tr>
+        </thead>
+        <tbody id="faqTbody"><tr><td colspan="7" class="loading"><span class="spin"></span>로딩중...</td></tr></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;justify-content:flex-end;font-size:12px;">
+      <button class="btn btn-ghost btn-sm" id="prevBtn" onclick="changePage(-1)">← 이전</button>
+      <span id="pageInfo" style="color:var(--gray4);">1 / 1</span>
+      <button class="btn btn-ghost btn-sm" id="nextBtn" onclick="changePage(1)">다음 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: KB 갱신 현황
+══════════════════════════════ -->
+<div class="page" id="page-kb-status">
+  <div class="kpi-grid">
+    <div class="kpi-card green"><div class="kpi-label">✅ 등록 완료</div><div class="kpi-val green">12건</div><div class="kpi-trend">NotebookLM 소스</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">📚 FAQ KB</div><div class="kpi-val blue" id="ksFaqCount">50</div><div class="kpi-trend">8개 분류</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">📋 정책 KB</div><div class="kpi-val teal">4건</div><div class="kpi-trend">POL01~04</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">🎯 ChromaDB 한도</div><div class="kpi-val yellow">24%</div><div class="kpi-trend">12/50개 사용</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-icon">🗄️</span>NotebookLM KB 소스 현황</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>소스명</th><th>문항</th><th>상태</th><th>최종갱신</th><th>액션</th></tr></thead>
+        <tbody id="kbSourceTable"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: 운영 통계
+══════════════════════════════ -->
+<div class="page" id="page-stats">
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">📬 총 문의</div><div class="kpi-val blue" id="stTotal">—</div><div class="kpi-trend up" id="stTrend">▲ 12%</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">✅ 자동 해결</div><div class="kpi-val teal" id="stResolved">—</div><div class="kpi-trend" id="stRate">—</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">📞 에스컬</div><div class="kpi-val orange" id="stEscalated">—</div><div class="kpi-trend" id="stEscRate">—</div></div>
+    <div class="kpi-card green"><div class="kpi-label">⚡ 응답속도</div><div class="kpi-val green" style="font-size:22px;">&lt;5ms</div><div class="kpi-trend">TF-IDF 인메모리</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📊</span>채널별 문의 비교</div>
+      <div id="channelChart"><div class="loading"><span class="spin"></span></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🕐</span>시간대별 분포</div>
+      <div class="chart-wrap"><svg id="hourChart" viewBox="0 0 420 140" style="width:100%;display:block;"></svg></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-icon">📋</span>분류별 상세 통계</div>
+    <div id="catStatsTable"><div class="loading"><span class="spin"></span></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: 평가 결과
+══════════════════════════════ -->
+<div class="page" id="page-evaluation">
+  <div class="kpi-grid">
+    <div class="kpi-card orange"><div class="kpi-label">⭐ NPS 점수</div><div class="kpi-val orange" id="evalNps">—</div><div class="kpi-trend">목표 Q2 48점</div></div>
+    <div class="kpi-card green"><div class="kpi-label">😊 긍정 평가</div><div class="kpi-val green" id="evalPos">—</div><div class="kpi-trend"></div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">😐 중립 평가</div><div class="kpi-val yellow" id="evalNeu">—</div><div class="kpi-trend"></div></div>
+    <div class="kpi-card blue"><div class="kpi-label">😞 부정 평가</div><div class="kpi-val blue" id="evalNeg">—</div><div class="kpi-trend">개선 필요</div></div>
+  </div>
+  <div class="grid-7-3">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📝</span>고객 평가 목록 <button class="btn btn-success btn-sm" style="margin-left:auto;" onclick="openEvalModal()">+ 평가 등록</button></div>
+      <div id="evalList"><div class="loading"><span class="spin"></span></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📊</span>평가 기준별 점수</div>
+      <div id="evalCriteria"></div>
+      <div style="margin-top:14px;padding:10px;background:var(--sky);border-radius:8px;font-size:11px;">
+        💡 <strong>개선 권고</strong><br>문제 해결도·톤 자연스러움 보강 필요<br>→ P3 톤 갱신 + KB 미해결 6건 완료 시 +0.5점 예상
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: 미해결 Top10
+══════════════════════════════ -->
+<div class="page" id="page-top10">
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><div class="kpi-label">📋 총 미해결</div><div class="kpi-val blue" id="t10Total">10</div><div class="kpi-trend">이번달 누적</div></div>
+    <div class="kpi-card green"><div class="kpi-label">✅ 갱신 완료</div><div class="kpi-val green" id="t10Done">4</div><div class="kpi-trend"></div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">⬜ 갱신 예정</div><div class="kpi-val yellow" id="t10Todo">6</div><div class="kpi-trend"></div></div>
+    <div class="kpi-card orange"><div class="kpi-label">❗ 즉시 시정</div><div class="kpi-val orange">1건</div><div class="kpi-trend">정책 충돌</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="card-icon">❗</span>미해결 Top10 — P4 폐곡선 월간 SOP
+      <span style="font-size:11px;color:var(--gray4);font-weight:400;margin-left:auto;">다음 미팅: 2026.06.03 (화) 14:00</span>
+    </div>
+    <div id="top10Table"><div class="loading"><span class="spin"></span></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: 챗봇 테스트
+══════════════════════════════ -->
+<div class="page" id="page-chat-test">
+  <div class="grid-7-3">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">💬</span>챗봇 실시간 테스트 — jhc-chatbot-v2 직접 호출</div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <select class="fi fi-sel" style="width:110px;" id="testChannel">
+          <option value="email">이메일</option>
+          <option value="kakao">카카오톡</option>
+        </select>
+        <input class="fi" style="width:120px;" placeholder="사용자 이름" id="testUserName" value="테스트">
+        <button class="btn btn-ghost btn-sm" onclick="clearChat()">채팅 초기화</button>
+      </div>
+      <div class="chat-box">
+        <div class="chat-msgs" id="chatMsgs">
+          <div class="msg-bot">안녕하세요, Honey예요! 😊<br>jhc-chatbot-v2 파이프라인으로 직접 질문해 보세요!</div>
+        </div>
+        <div class="shortcut-row">
+          <button class="shortcut" onclick="quickSend('환불 가능한가요?')">환불 문의</button>
+          <button class="shortcut" onclick="quickSend('배송 며칠 걸려요?')">배송 기간</button>
+          <button class="shortcut" onclick="quickSend('피부 발진 났어요')">피부 트러블</button>
+          <button class="shortcut" onclick="quickSend('임산부인데 써도 되나요')">임산부 문의</button>
+          <button class="shortcut" onclick="quickSend('VIP 혜택 알려주세요')">VIP 혜택</button>
+          <button class="shortcut" onclick="quickSend('화나요 진짜')">감정 격화</button>
+        </div>
+        <div class="chat-inp-row">
+          <input class="chat-inp" id="chatInput" placeholder="질문을 입력하세요..." onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="chat-send" onclick="sendChat()">↑</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📊</span>마지막 응답 분석</div>
+      <div id="lastResult" style="font-size:12px;color:var(--gray4);">응답을 기다리는 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: 대화 로그
+══════════════════════════════ -->
+<div class="page" id="page-logs">
+  <div class="card">
+    <div class="card-title"><span class="card-icon">📋</span>최근 대화 로그 — API 직접 조회</div>
+    <div id="logsTable"><div class="loading"><span class="spin"></span></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     PAGE: 시스템 설정
+══════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🤖</span>챗봇 기본 설정</div>
+      <div class="fg"><label>챗봇 이름</label><input class="fi" value="Honey"></div>
+      <div class="fg"><label>회사명</label><input class="fi" value="J Health Care"></div>
+      <div class="fg"><label>환영 메시지</label><textarea class="fi fi-ta" style="min-height:60px;">안녕하세요, Honey예요! 😊 자주 묻는 질문은 즉시 안내드리고, 복잡한 건 담당자 즉시 연결할게요!</textarea></div>
+      <button class="btn btn-primary" onclick="showNotif('기본 설정 저장 완료!','success')">저장</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🔍</span>검색 엔진 설정</div>
+      <div class="fg"><label>최소 유사도 점수 (0~1)</label><input class="fi" type="number" step="0.01" value="0.05"></div>
+      <div class="fg"><label>상위 K개 결과</label><input class="fi" type="number" value="3"></div>
+      <div class="fg"><label>완전 일치 가중치</label><input class="fi" type="number" step="0.1" value="2.0"></div>
+      <div class="fg"><label>키워드 매칭 가중치</label><input class="fi" type="number" step="0.1" value="1.5"></div>
+      <button class="btn btn-primary" onclick="showNotif('검색 설정 저장 완료!','success')">저장</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">📱</span>카카오톡 채널 설정</div>
+      <form onsubmit="return false;" autocomplete="off">
+        <input type="text" name="username" autocomplete="username" style="display:none;" aria-hidden="true">
+        <div class="fg"><label>채널 ID</label><input class="fi" type="password" placeholder="_xxxxx" autocomplete="new-password"></div>
+        <div class="fg"><label>채널 시크릿 키</label><input class="fi" type="password" placeholder="••••••••••••" autocomplete="new-password"></div>
+        <div class="fg"><label>Webhook URL (읽기 전용)</label><input class="fi" id="webhookUrl" readonly style="background:var(--gray1);"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="showNotif('카카오 설정 저장 완료!','success')">저장</button>
+          <button class="btn btn-ghost" onclick="showNotif('Webhook 연결 테스트 성공! ✅','success')">연결 테스트</button>
+        </div>
+      </form>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="card-icon">🗄️</span>ChromaDB 설정</div>
+      <div class="fg"><label>호스트</label><input class="fi" value="localhost"></div>
+      <div class="fg"><label>포트</label><input class="fi" type="number" value="8000"></div>
+      <div class="fg"><label>데이터 저장 경로</label><input class="fi" value="./data/chromadb"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="showNotif('ChromaDB 설정 저장!','success')">저장</button>
+        <button class="btn btn-ghost" onclick="checkChroma()">연결 확인</button>
+      </div>
+      <div id="chromaStatus" style="margin-top:8px;font-size:11px;color:var(--gray4);"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- ── FAQ 모달 ── -->
+<div class="overlay" id="faqModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title" id="faqModalTitle">FAQ 추가</div>
+      <button class="modal-close" onclick="closeModal('faqModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editFaqId">
+      <div class="fg"><label>분류 *</label>
+        <select class="fi fi-sel" id="mCat">
+          <option>주문·결제</option><option>배송</option><option>교환·환불</option>
+          <option>제품·성분</option><option>피부 트러블</option><option>회원·혜택</option>
+          <option>안전·법규</option><option>채널·서비스</option>
+        </select>
+      </div>
+      <div class="fg"><label>질문 *</label><input class="fi" id="mQ" placeholder="고객이 자주 묻는 질문"></div>
+      <div class="fg"><label>답변 *</label><textarea class="fi fi-ta" id="mA" placeholder="KB 정책 기반 정확한 답변"></textarea></div>
+      <div class="fg">
+        <label>키워드 (Enter로 추가)</label>
+        <div class="tag-wrap" id="tagWrap">
+          <input class="tag-inp" id="tagInput" placeholder="키워드 입력..." onkeydown="addTag(event)">
+        </div>
+      </div>
+      <div class="fg"><label>관련 법규</label><input class="fi" id="mLaw" placeholder="예: 전자상거래법 제17조"></div>
+      <div style="display:flex;gap:20px;">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="mEsc"> 에스컬레이션 필요
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="mSen"> 민감 정보 포함
+        </label>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('faqModal')">취소</button>
+      <button class="btn btn-success" onclick="saveFaq()">💾 저장 및 KB 반영</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 평가 등록 모달 ── -->
+<div class="overlay" id="evalModal">
+  <div class="modal" style="width:480px;">
+    <div class="modal-hd">
+      <div class="modal-title">평가 등록</div>
+      <button class="modal-close" onclick="closeModal('evalModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg"><label>고객명</label><input class="fi" id="emName" placeholder="익명 가능"></div>
+      <div class="fg"><label>채널</label>
+        <select class="fi fi-sel" id="emChannel"><option value="kakao">카카오톡</option><option value="email">이메일</option></select>
+      </div>
+      <div class="fg"><label>별점 (1~5)</label>
+        <select class="fi fi-sel" id="emScore">
+          <option value="5">⭐⭐⭐⭐⭐ 5점 — 매우 만족</option>
+          <option value="4">⭐⭐⭐⭐☆ 4점 — 만족</option>
+          <option value="3">⭐⭐⭐☆☆ 3점 — 보통</option>
+          <option value="2">⭐⭐☆☆☆ 2점 — 불만족</option>
+          <option value="1">⭐☆☆☆☆ 1점 — 매우 불만족</option>
+        </select>
+      </div>
+      <div class="fg"><label>분류</label>
+        <select class="fi fi-sel" id="emCat">
+          <option>배송</option><option>교환·환불</option><option>제품·성분</option>
+          <option>회원·혜택</option><option>피부 트러블</option><option>기타</option>
+        </select>
+      </div>
+      <div class="fg"><label>코멘트</label><textarea class="fi fi-ta" style="min-height:70px;" id="emComment" placeholder="고객 의견"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('evalModal')">취소</button>
+      <button class="btn btn-success" onclick="saveEval()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 알림 ── -->
+<div class="notif" id="notif"></div>
+
+<script>
+// ══════════════════════════════════════════
+// API 베이스 URL (같은 서버)
+// ══════════════════════════════════════════
+const API = '/admin/api';
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+  return res.json();
+}
+
+// ══════════════════════════════════════════
+// 네비게이션
+// ══════════════════════════════════════════
+const PAGE_META = {
+  dashboard:  ['대시보드',        'jhc-chatbot-v2 실시간 인터페이스'],
+  p1:         ['P1 · KB 진단',    '4변수 8문항 진단 결과'],
+  p2:         ['P2 · RAG 엔진',   'TF-IDF 검색 엔진 실시간 현황'],
+  p3:         ['P3 · 3톤 분리',   '12상황 × 3톤 매트릭스'],
+  p4:         ['P4 · 폐곡선',     '월간 KB 갱신 SOP'],
+  p5:         ['P5 · 컴플라이언스','6항목 법규 준수 현황'],
+  'faq-kb':   ['FAQ KB 편집',     '50문항 지식베이스 CRUD'],
+  'kb-status':['KB 갱신 현황',    'NotebookLM 소스 관리'],
+  stats:      ['운영 통계',        '채널·시간대·분류별 분석'],
+  evaluation: ['평가 결과',        '고객 만족도 NPS 현황'],
+  top10:      ['미해결 Top10',    'P4 폐곡선 KB 갱신 트리거'],
+  'chat-test':['챗봇 테스트',     'jhc-chatbot-v2 파이프라인 직접 호출'],
+  logs:       ['대화 로그',        '최근 대화 기록 조회'],
+  settings:   ['시스템 설정',      '챗봇·검색·카카오·ChromaDB 설정'],
+};
+
+function goPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const pg = document.getElementById('page-' + id);
+  if (!pg) return;
+  pg.classList.add('active');
+  if (el) el.classList.add('active');
+  else {
+    const found = document.querySelector(`.nav-item[data-page="${id}"]`);
+    if (found) found.classList.add('active');
+  }
+  const meta = PAGE_META[id] || ['—', '—'];
+  document.getElementById('pageTitle').textContent = meta[0];
+  document.getElementById('pageSub').textContent   = meta[1];
+  // 페이지별 데이터 로드
+  const loaders = {
+    dashboard:   loadDashboard,
+    p2:          fetchEngine,
+    p3:          loadP3,
+    p4:          loadP4,
+    p5:          loadP5,
+    'faq-kb':    fetchFaq,
+    'kb-status': loadKbStatus,
+    stats:       loadStats,
+    evaluation:  loadEvaluation,
+    top10:       loadTop10,
+    logs:        loadLogs,
+  };
+  if (loaders[id]) loaders[id]();
+}
+
+document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+  el.addEventListener('click', () => goPage(el.dataset.page, el));
+});
+
+// ══════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════
+async function loadDashboard() {
+  try {
+    const data = await api('/dashboard');
+    renderDashKpi(data.kpi);
+    renderPipeline(data.pipeline, 'dashPipeline');
+    renderTrendChart(null); // 시뮬레이션
+    renderDonut();
+    renderDashTop5(data.recentTop5);
+    renderDashEval(data.recentEvals);
+    if (data.engine) {
+      document.getElementById('engineMode').textContent = data.engine.mode === 'chromadb' ? 'ChromaDB' : 'TF-IDF';
+    }
+  } catch (e) {
+    showNotif('대시보드 로드 실패: ' + e.message, 'error');
+  }
+}
+
+function renderDashKpi(kpi) {
+  const g = document.getElementById('dashKpi');
+  if (!g) return;
+  g.innerHTML = `
+    <div class="kpi-card blue"><div class="kpi-label">📬 이번달 총 문의</div><div class="kpi-val blue">${kpi.totalMessages}</div><div class="kpi-trend up">▲ 12% 전월 대비</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">✅ 자동 해결률</div><div class="kpi-val teal">${kpi.resolveRate}</div><div class="kpi-trend up">목표 93%</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">⭐ NPS</div><div class="kpi-val orange">${kpi.nps}</div><div class="kpi-trend">Q1 측정 시작</div></div>
+    <div class="kpi-card green"><div class="kpi-label">📚 KB 문항</div><div class="kpi-val green">${kpi.kbCount}</div><div class="kpi-trend">FAQ+정책</div></div>
+  `;
+}
+
+function renderPipeline(p, targetId) {
+  const el = document.getElementById(targetId);
+  if (!el || !p) return;
+  el.innerHTML = `
+    <div class="pipe-step" onclick="goPage('p1')"><div class="pipe-icon">🔍</div><div class="pipe-name">P1 KB 진단</div><div class="pipe-detail">4변수</div><div class="pipe-badge mid">${p.p1.score}/${p.p1.max}</div></div>
+    <div class="pipe-step" onclick="goPage('p2')"><div class="pipe-icon">⚙️</div><div class="pipe-name">P2 RAG 엔진</div><div class="pipe-detail">TF-IDF</div><div class="pipe-badge high">${p.p2.accuracy}%</div></div>
+    <div class="pipe-step" onclick="goPage('p3')"><div class="pipe-icon">🎨</div><div class="pipe-name">P3 3톤 분리</div><div class="pipe-detail">12상황</div><div class="pipe-badge high">양호</div></div>
+    <div class="pipe-step" onclick="goPage('p4')"><div class="pipe-icon">🔄</div><div class="pipe-name">P4 폐곡선</div><div class="pipe-detail">Top10</div><div class="pipe-badge mid">${p.p4.top10Done}/${p.p4.top10Total}</div></div>
+    <div class="pipe-step" onclick="goPage('p5')"><div class="pipe-icon">🛡️</div><div class="pipe-name">P5 컴플</div><div class="pipe-detail">6항목</div><div class="pipe-badge ${p.p5.warn>0?'mid':'high'}">${p.p5.ok}정상·${p.p5.warn}시정</div></div>
+  `;
+}
+
+function renderTrendChart() {
+  const svg = document.getElementById('trendChart');
+  if (!svg) return;
+  const months = ['10월','11월','12월','1월','2월','3월','4월'];
+  const totals  = [312,341,378,398,421,454,487];
+  const solved  = [234,263,295,316,339,369,394];
+  const W=600,H=160,px=50,py=20;
+  const mx = Math.max(...totals);
+  const xs = totals.map((_,i)=>px+i*(W-px*2)/6);
+  const yt = v => H-py-(v/mx)*(H-py*2);
+  const poly = pts => pts.map(p=>p.join(',')).join(' ');
+  svg.innerHTML = `
+    <defs><linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1B5FA8" stop-opacity=".25"/><stop offset="100%" stop-color="#1B5FA8" stop-opacity="0"/></linearGradient>
+    <linearGradient id="gs" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00C4B4" stop-opacity=".2"/><stop offset="100%" stop-color="#00C4B4" stop-opacity="0"/></linearGradient></defs>
+    ${[0.25,0.5,0.75,1].map(r=>`<line x1="${px}" y1="${yt(mx*r)}" x2="${W-px}" y2="${yt(mx*r)}" stroke="#e2e8f0" stroke-width="1"/><text x="${px-4}" y="${yt(mx*r)+4}" font-size="9" fill="#94a3b8" text-anchor="end">${Math.round(mx*r)}</text>`).join('')}
+    <polygon points="${xs.map((x,i)=>[x,yt(totals[i])]).concat([[W-px,H-py],[px,H-py]]).map(p=>p.join(',')).join(' ')}" fill="url(#gt)"/>
+    <polyline points="${xs.map((x,i)=>[x,yt(totals[i])].join(',')).join(' ')}" fill="none" stroke="#1B5FA8" stroke-width="2.5" stroke-linejoin="round"/>
+    <polygon points="${xs.map((x,i)=>[x,yt(solved[i])]).concat([[W-px,H-py],[px,H-py]]).map(p=>p.join(',')).join(' ')}" fill="url(#gs)"/>
+    <polyline points="${xs.map((x,i)=>[x,yt(solved[i])].join(',')).join(' ')}" fill="none" stroke="#00C4B4" stroke-width="2" stroke-dasharray="4 2" stroke-linejoin="round"/>
+    ${xs.map((x,i)=>`<circle cx="${x}" cy="${yt(totals[i])}" r="${i===xs.length-1?5:3}" fill="#1B5FA8" ${i===xs.length-1?'stroke="#fff" stroke-width="2"':''}/>`).join('')}
+    ${months.map((m,i)=>`<text x="${xs[i]}" y="${H-2}" font-size="9" fill="#64748b" text-anchor="middle">${m}</text>`).join('')}
+  `;
+}
+
+function renderDonut() {
+  const svg = document.getElementById('donutChart');
+  const leg = document.getElementById('donutLegend');
+  if (!svg) return;
+  const cats = [
+    {label:'교환·환불',pct:33,color:'#1B5FA8'},
+    {label:'배송',     pct:24,color:'#00C4B4'},
+    {label:'제품·성분',pct:20,color:'#FF6B35'},
+    {label:'회원·혜택',pct:14,color:'#10B981'},
+    {label:'기타',     pct:9, color:'#F59E0B'},
+  ];
+  let offset=0;
+  const r=45,cx=60,cy=60,total=283; // circumference
+  svg.innerHTML = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E2E8F0" stroke-width="22"/>` +
+    cats.map(c=>{
+      const dash=c.pct/100*total;
+      const el=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c.color}" stroke-width="22" stroke-dasharray="${dash} ${total}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity=".9"/>`;
+      offset+=dash; return el;
+    }).join('') +
+    `<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-weight="900" fill="#1E293B">487</text>
+     <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="7" fill="#94a3b8">총 문의</text>`;
+  if (leg) leg.innerHTML = cats.map(c=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><div style="width:8px;height:8px;border-radius:50%;background:${c.color};flex-shrink:0;"></div><span>${c.label} ${c.pct}%</span></div>`).join('');
+}
+
+function renderDashTop5(data) {
+  const el = document.getElementById('dashTop5');
+  if (!el || !data) return;
+  el.innerHTML = data.map((r,i)=>`
+    <div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray2);">
+      <strong style="font-family:Montserrat;font-size:16px;color:${i<3?'var(--accent2)':'var(--gray3)'};min-width:24px;">${r.id||i+1}</strong>
+      <div style="flex:1;margin:0 10px;"><div style="font-size:12px;font-weight:700;">${r.pattern}</div><div style="font-size:10px;color:var(--gray4);">${r.faq||''}</div></div>
+      <div style="text-align:right;"><div style="font-family:Montserrat;font-weight:900;color:var(--primary);">${r.count}</div>
+        <div style="font-size:10px;color:${r.resolved?'var(--green)':'var(--yellow)'};">${r.resolved?'✅':'⬜'}</div></div>
+    </div>
+  `).join('');
+}
+
+function renderDashEval(data) {
+  const el = document.getElementById('dashEval');
+  if (!el || !data) return;
+  el.innerHTML = data.map(e=>`
+    <div style="padding:8px 0;border-bottom:1px solid var(--gray2);">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+        <span style="font-size:12px;font-weight:700;">${e.userName}</span>
+        <span style="color:#F59E0B;font-size:12px;">${'★'.repeat(e.score)}${'☆'.repeat(5-e.score)}</span>
+        <span style="font-size:10px;color:var(--gray4);">${timeAgo(e.createdAt)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text);">${e.comment}</div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════
+// P2 RAG 엔진
+// ══════════════════════════════════════════
+async function fetchEngine() {
+  try {
+    const d = await api('/engine');
+    document.getElementById('p2acc').textContent    = d.accuracy + '%';
+    document.getElementById('p2docs').textContent   = d.docCount || '—';
+    document.getElementById('p2vocab').textContent  = d.vocabSize || '—';
+    document.getElementById('p2ms').textContent     = (d.avgResponseMs || '< 5') + 'ms';
+    const el = document.getElementById('engineStatus');
+    if (el) el.innerHTML = `
+      <table><tr><th>항목</th><th>값</th><th>상태</th></tr>
+        <tr><td>검색 모드</td><td>${d.mode || 'TF-IDF'}</td><td><span class="badge ok">작동중</span></td></tr>
+        <tr><td>ChromaDB</td><td>${d.chromaStatus==='online'?'연결됨':'미연결'}</td><td><span class="badge ${d.chromaStatus==='online'?'ok':'warn'}">${d.chromaStatus==='online'?'온라인':'폴백모드'}</span></td></tr>
+        <tr><td>어휘 사전</td><td>${d.vocabSize}개</td><td><span class="badge ok">정상</span></td></tr>
+        <tr><td>평균 응답</td><td>${d.avgResponseMs}ms</td><td><span class="badge ok">정상</span></td></tr>
+        <tr><td>캐시 적중률</td><td>${d.cacheHitRate}</td><td><span class="badge info">양호</span></td></tr>
+      </table>`;
+    const trap = document.getElementById('trapStats');
+    if (trap && d.trapBlocked) trap.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${[
+          ['함정1 — 정보 부재 추측', d.trapBlocked.trap1, 'red'],
+          ['함정2 — 책임 단정', d.trapBlocked.trap2, 'yellow'],
+          ['함정3 — 복합 단답', d.trapBlocked.trap3, 'green'],
+          ['화장품법 위반 표현', d.trapBlocked.cosmLaw, 'info'],
+        ].map(([name,cnt,color])=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--gray1);border-radius:7px;">
+            <div style="flex:1;font-size:12px;font-weight:600;">${name}</div>
+            <span class="badge ${color}">${cnt}건 차단</span>
+          </div>`).join('')}
+      </div>`;
+  } catch(e) { showNotif('엔진 조회 실패','error'); }
+}
+
+async function reindexKB() {
+  showNotif('KB 재인덱싱 시작...', 'warn');
+  try {
+    const d = await api('/faq/reindex', { method: 'POST' });
+    showNotif(`재인덱싱 완료! 모드:${d.mode} 문서:${d.docCount}개`, 'success');
+  } catch(e) { showNotif('재인덱싱 실패: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════
+// P3 3톤 분리
+// ══════════════════════════════════════════
+async function loadP3() {
+  try {
+    const d = await api('/stats');
+    const el = document.getElementById('p3Situations');
+    if (el && d.bySituation) {
+      const max = Math.max(...d.bySituation.map(s=>s.count));
+      el.innerHTML = d.bySituation.map(s=>`
+        <div class="prog-wrap">
+          <div class="prog-label"><span>${s.situation}</span><span style="font-weight:700;">${s.count}건</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${(s.count/max*100).toFixed(0)}%;background:var(--primary);"></div></div>
+        </div>`).join('');
+    }
+    const ts = document.getElementById('toneSettings');
+    if (ts) ts.innerHTML = [
+      ['발랄·트렌디 톤', 'Honey 브랜드 보이스', true],
+      ['이모지 사용', '카카오톡 응답시 활성화', true],
+      ['감정격화 즉시 에스컬', '감지 시 담당자 즉시 연결', true],
+      ['카카오톡 200자 제한', '자동 압축 적용', true],
+      ['다국어 입력 병기', '영어 입력시 한+영 응답', true],
+    ].map(([name,desc,on])=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--gray1);border-radius:8px;">
+        <div><div style="font-size:13px;font-weight:700;">${name}</div><div style="font-size:11px;color:var(--gray4);">${desc}</div></div>
+        <label class="toggle"><input type="checkbox" ${on?'checked':''}><span class="tgl-slider"></span></label>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+// P4 폐곡선
+// ══════════════════════════════════════════
+async function loadP4() {
+  try {
+    const d = await api('/top10');
+    renderTop10Table(d.patterns, 'p4Top10');
+    const done = d.patterns.filter(p=>p.resolved).length;
+    document.getElementById('p4done').textContent = done;
+    document.getElementById('p4todo').textContent = d.patterns.length - done;
+  } catch(e) { showNotif('P4 로드 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// P5 컴플라이언스
+// ══════════════════════════════════════════
+async function loadP5() {
+  try {
+    const d = await api('/compliance');
+    const ct = document.getElementById('complianceTable');
+    if (ct) ct.innerHTML = `<div class="tbl-wrap"><table>
+      <tr><th>#</th><th>점검 항목</th><th>결과</th><th>관련 법규</th><th>상세</th><th>FAQ</th><th>완료 목표</th></tr>
+      ${d.items.map(i=>`<tr>
+        <td>${i.id}</td><td style="font-weight:600;">${i.name}</td>
+        <td><span class="badge ${i.status==='ok'?'ok':i.status==='warn'?'warn':'alert'}">${i.status==='ok'?'✅ 정상':i.status==='warn'?'🔄 시정중':'❗ 즉시'}</span></td>
+        <td style="font-size:11px;">${i.law}</td>
+        <td style="font-size:11px;color:var(--gray4);">${i.detail}</td>
+        <td style="font-size:11px;color:var(--primary);">${i.faq}</td>
+        <td style="font-size:11px;">${i.dueDate||i.completedAt||'—'}</td>
+      </tr>`).join('')}
+    </table></div>`;
+    const cm = document.getElementById('cosmLawTable');
+    if (cm) cm.innerHTML = d.cosmLaw.map(c=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--sky);border-radius:8px;margin-bottom:7px;">
+        <span style="font-size:18px;">✅</span>
+        <div><div style="font-size:12px;font-weight:700;">${c.article}</div><div style="font-size:11px;color:var(--gray4);">${c.desc}</div></div>
+        <span class="badge info" style="margin-left:auto;">${c.faq}</span>
+      </div>`).join('');
+    const co = document.getElementById('cosoTable');
+    const cosoColors = {ok:'var(--green)',warn:'var(--yellow)',alert:'var(--red)'};
+    if (co) co.innerHTML = Object.entries(d.coso).map(([k,v])=>`
+      <div style="padding:10px;background:var(--gray1);border-radius:8px;border-left:3px solid ${cosoColors[v.status]};margin-bottom:7px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+          <span style="font-size:12px;font-weight:700;color:var(--dark);">${{operations:'운영',strategic:'전략',compliance:'준법',reporting:'보고'}[k]}</span>
+          <span class="badge ${v.status==='ok'?'ok':v.status==='warn'?'warn':'alert'}">${v.label}</span>
+        </div>
+        <div style="font-size:11px;color:var(--gray4);">${v.detail}</div>
+      </div>`).join('');
+  } catch(e) { showNotif('P5 로드 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// FAQ KB CRUD
+// ══════════════════════════════════════════
+let faqPage = 1;
+let faqTotalPages = 1;
+let currentTags = [];
+let editingFaqId = null;
+
+async function fetchFaq() {
+  const q   = document.getElementById('faqSearch')?.value || '';
+  const cat = document.getElementById('faqCatFilter')?.value || '';
+  try {
+    const d = await api(`/faq?q=${encodeURIComponent(q)}&cat=${encodeURIComponent(cat)}&page=${faqPage}&limit=20`);
+    faqTotalPages = Math.ceil(d.total / 20) || 1;
+    document.getElementById('faqTotalLabel').textContent = d.total;
+    document.getElementById('sbFaqCount').textContent    = d.total;
+    document.getElementById('pageInfo').textContent = `${faqPage} / ${faqTotalPages}`;
+    document.getElementById('prevBtn').disabled = faqPage <= 1;
+    document.getElementById('nextBtn').disabled = faqPage >= faqTotalPages;
+    const tb = document.getElementById('faqTbody');
+    if (!d.data.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray4);padding:20px;">FAQ 없음</td></tr>'; return; }
+    tb.innerHTML = d.data.map(f=>`<tr>
+      <td><span style="font-family:Montserrat;font-weight:700;font-size:11px;color:var(--primary);">${f.id}</span></td>
+      <td><span class="badge info">${f.category}</span></td>
+      <td style="font-weight:600;font-size:12px;">${f.question}</td>
+      <td style="font-size:10px;color:var(--gray4);">${(f.keywords||[]).slice(0,3).join(', ')}</td>
+      <td style="font-size:10px;">${f.law?`<span style="color:var(--primary);">${f.law.slice(0,15)}</span>`:'—'}</td>
+      <td>${f.escalate?'<span class="badge alert">에스컬</span>':'—'}</td>
+      <td><div style="display:flex;gap:4px;">
+        <button class="btn btn-ghost btn-sm" onclick="editFaq('${f.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="delFaq('${f.id}')">🗑️</button>
+      </div></td>
+    </tr>`).join('');
+  } catch(e) { showNotif('FAQ 로드 실패: '+e.message,'error'); }
+}
+
+function changePage(dir) { faqPage = Math.max(1, Math.min(faqTotalPages, faqPage+dir)); fetchFaq(); }
+
+function openFaqModal() {
+  editingFaqId = null;
+  document.getElementById('faqModalTitle').textContent = 'FAQ 추가';
+  document.getElementById('editFaqId').value = '';
+  document.getElementById('mQ').value = '';
+  document.getElementById('mA').value = '';
+  document.getElementById('mLaw').value = '';
+  document.getElementById('mEsc').checked = false;
+  document.getElementById('mSen').checked = false;
+  currentTags = [];
+  renderTags();
+  document.getElementById('faqModal').classList.add('open');
+}
+
+async function editFaq(id) {
+  try {
+    const d = await api('/faq?page=1&limit=500');
+    const f = d.data.find(x=>x.id===id);
+    if (!f) return;
+    editingFaqId = id;
+    document.getElementById('faqModalTitle').textContent = `FAQ 수정 — ${id}`;
+    document.getElementById('editFaqId').value = id;
+    document.getElementById('mCat').value = f.category;
+    document.getElementById('mQ').value   = f.question;
+    document.getElementById('mA').value   = f.answer;
+    document.getElementById('mLaw').value = f.law || '';
+    document.getElementById('mEsc').checked = f.escalate;
+    document.getElementById('mSen').checked = f.sensitive;
+    currentTags = [...(f.keywords||[])];
+    renderTags();
+    document.getElementById('faqModal').classList.add('open');
+  } catch(e) { showNotif('FAQ 불러오기 실패','error'); }
+}
+
+async function delFaq(id) {
+  if (!confirm(`${id} FAQ를 삭제하시겠습니까?`)) return;
+  try {
+    await api('/faq/' + id, { method: 'DELETE' });
+    showNotif(`${id} 삭제 완료. KB 재인덱싱이 필요합니다.`, 'warn');
+    fetchFaq();
+  } catch(e) { showNotif('삭제 실패','error'); }
+}
+
+async function saveFaq() {
+  const q   = document.getElementById('mQ').value.trim();
+  const a   = document.getElementById('mA').value.trim();
+  if (!q || !a) { showNotif('질문과 답변은 필수입니다.','error'); return; }
+  const body = {
+    category: document.getElementById('mCat').value,
+    question: q, answer: a,
+    keywords: currentTags,
+    law:      document.getElementById('mLaw').value,
+    escalate: document.getElementById('mEsc').checked,
+    sensitive: document.getElementById('mSen').checked,
+  };
+  try {
+    const id = document.getElementById('editFaqId').value;
+    if (id) {
+      await api('/faq/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      showNotif(`${id} 수정 완료! KB 반영됨 ✅`, 'success');
+    } else {
+      const r = await api('/faq', { method: 'POST', body: JSON.stringify(body) });
+      showNotif(`${r.id} 추가 완료! KB 반영됨 ✅`, 'success');
+    }
+    closeModal('faqModal');
+    fetchFaq();
+  } catch(e) { showNotif('저장 실패: '+e.message,'error'); }
+}
+
+function addTag(e) {
+  if (e.key !== 'Enter') return;
+  const v = e.target.value.trim();
+  if (v && !currentTags.includes(v)) { currentTags.push(v); renderTags(); }
+  e.target.value = '';
+  e.preventDefault();
+}
+function removeTag(t) { currentTags = currentTags.filter(x=>x!==t); renderTags(); }
+function renderTags() {
+  const c = document.getElementById('tagWrap');
+  const inp = document.getElementById('tagInput');
+  c.innerHTML = '';
+  currentTags.forEach(t => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${t}<button onclick="removeTag('${t}')">×</button>`;
+    c.appendChild(chip);
+  });
+  c.appendChild(inp);
+}
+
+// ══════════════════════════════════════════
+// KB 갱신 현황
+// ══════════════════════════════════════════
+function loadKbStatus() {
+  const sources = [
+    {idx:1,name:'JHC FAQ 주문·결제',q:'Q01~06'},{idx:2,name:'JHC FAQ 배송',q:'Q07~12'},
+    {idx:3,name:'JHC FAQ 교환·환불',q:'Q13~20'},{idx:4,name:'JHC FAQ 제품·성분',q:'Q21~28'},
+    {idx:5,name:'JHC FAQ 피부 트러블',q:'Q29~34'},{idx:6,name:'JHC FAQ 회원·혜택',q:'Q35~40'},
+    {idx:7,name:'JHC FAQ 안전·법규',q:'Q41~45'},{idx:8,name:'JHC FAQ 채널·서비스',q:'Q46~50'},
+    {idx:9,name:'JHC 정책 배송',q:'POL02'},{idx:10,name:'JHC 정책 환불',q:'POL01'},
+    {idx:11,name:'JHC 정책 VIP',q:'POL03'},{idx:12,name:'JHC 정책 개인정보',q:'POL04'},
+  ];
+  const tb = document.getElementById('kbSourceTable');
+  if (tb) tb.innerHTML = sources.map(s=>`<tr>
+    <td>${s.idx}</td><td style="font-weight:600;">${s.name}</td><td>${s.q}</td>
+    <td><span class="badge ok">✅ 등록</span></td><td>2026.05.01</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="showNotif('${s.name} 재동기화!','success')">동기화</button></td>
+  </tr>`).join('');
+}
+
+// ══════════════════════════════════════════
+// 운영 통계
+// ══════════════════════════════════════════
+async function loadStats() {
+  try {
+    const d = await api('/stats');
+    document.getElementById('stTotal').textContent    = d.totalMessages;
+    document.getElementById('stResolved').textContent = d.resolved;
+    document.getElementById('stRate').textContent     = `해결률 ${d.resolveRate}`;
+    document.getElementById('stEscalated').textContent= d.escalated;
+    document.getElementById('stEscRate').textContent  = `에스컬률 ${Math.round(d.escalated/d.totalMessages*100)}%`;
+    // 채널별 차트
+    const cc = document.getElementById('channelChart');
+    if (cc && d.byChannel) {
+      const max = Math.max(...d.byChannel.map(c=>c.c));
+      cc.innerHTML = `<svg viewBox="0 0 360 160" style="width:100%;display:block;background:var(--gray1);border-radius:10px;">` +
+        d.byChannel.map((c,i)=>{
+          const h = (c.c/max)*110;
+          const x = 60+i*120;
+          return `<rect x="${x}" y="${140-h}" width="70" height="${h}" rx="6" fill="${i===0?'var(--primary)':'var(--accent)'}" opacity=".9"/>
+            <text x="${x+35}" y="${140-h-6}" text-anchor="middle" font-size="11" font-weight="700" fill="${i===0?'var(--primary)':'var(--accent)}'}">${c.c}건</text>
+            <text x="${x+35}" y="155" text-anchor="middle" font-size="10" fill="#64748b">${c.channel}</text>`;
+        }).join('') + `</svg>`;
+    }
+    // 시간대 차트
+    if (d.byHour) {
+      const hsvg = document.getElementById('hourChart');
+      if (hsvg) {
+        const max2 = Math.max(...d.byHour.map(h=>h.count));
+        hsvg.innerHTML = d.byHour.map((h,i)=>{
+          const ht = (h.count/max2)*100;
+          const x = 20+i*(380/d.byHour.length);
+          const w = 380/d.byHour.length-2;
+          return `<rect x="${x}" y="${120-ht}" width="${w}" height="${ht}" rx="3" fill="var(--primary)" opacity="${0.3+h.count/max2*0.7}"/>
+            <text x="${x+w/2}" y="135" font-size="8" fill="#64748b" text-anchor="middle">${h.hour}</text>`;
+        }).join('');
+      }
+    }
+    // 분류별 테이블
+    const ct = document.getElementById('catStatsTable');
+    if (ct && d.byCategory) ct.innerHTML = `<div class="tbl-wrap"><table>
+      <tr><th>분류</th><th>총 문의</th><th>자동 해결</th><th>에스컬</th><th>해결률</th></tr>
+      ${d.byCategory.map(c=>`<tr>
+        <td><span class="badge info">${c.category}</span></td>
+        <td><strong>${c.count}건</strong></td><td>${c.resolved}건</td><td>${c.escalated}건</td>
+        <td><div style="display:flex;align-items:center;gap:6px;">
+          <div style="width:50px;height:5px;background:var(--gray2);border-radius:3px;overflow:hidden;">
+            <div style="width:${(c.resolved/c.count*100).toFixed(0)}%;height:100%;background:var(--green);border-radius:3px;"></div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:var(--green);">${(c.resolved/c.count*100).toFixed(0)}%</span>
+        </div></td>
+      </tr>`).join('')}
+    </table></div>`;
+  } catch(e) { showNotif('통계 로드 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// 평가 결과
+// ══════════════════════════════════════════
+async function loadEvaluation() {
+  try {
+    const d = await api('/evaluation');
+    document.getElementById('evalNps').textContent = d.summary.nps;
+    document.getElementById('evalPos').textContent = d.summary.positive + '%';
+    document.getElementById('evalNeu').textContent = d.summary.neutral + '%';
+    document.getElementById('evalNeg').textContent = d.summary.negative + '%';
+    const el = document.getElementById('evalList');
+    if (el) el.innerHTML = d.list.map(e=>`
+      <div class="eval-card">
+        <div class="eval-avatar">${e.userName.charAt(0)}</div>
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
+            <span class="eval-name">${e.userName}</span>
+            <span class="stars">${'★'.repeat(e.score)}${'☆'.repeat(5-e.score)}</span>
+            <span style="font-size:10px;color:var(--gray4);">${timeAgo(e.createdAt)}</span>
+            <span class="badge info" style="font-size:10px;">${e.category}</span>
+            <span class="badge ${e.channel==='kakao'?'ok':'info'}" style="font-size:10px;">${e.channel}</span>
+          </div>
+          <div class="eval-text">${e.comment||'(코멘트 없음)'}</div>
+          <div class="eval-src">📎 ${e.source||''}</div>
+        </div>
+      </div>`).join('');
+    const cr = document.getElementById('evalCriteria');
+    if (cr && d.criteria) {
+      const labels = {accuracy:'응답 정확도',speed:'응답 속도',naturalness:'톤 자연스러움',resolution:'문제 해결도',escalate:'에스컬 만족도'};
+      const colors = {accuracy:'var(--green)',speed:'var(--primary)',naturalness:'var(--accent)',resolution:'var(--accent2)',escalate:'var(--yellow)'};
+      cr.innerHTML = Object.entries(d.criteria).map(([k,v])=>`
+        <div class="prog-wrap">
+          <div class="prog-label"><span>${labels[k]||k}</span><span style="font-weight:700;color:${colors[k]}">${v}/5.0</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${v/5*100}%;background:${colors[k]}"></div></div>
+        </div>`).join('');
+    }
+  } catch(e) { showNotif('평가 로드 실패','error'); }
+}
+
+function openEvalModal() { document.getElementById('evalModal').classList.add('open'); }
+async function saveEval() {
+  const body = {
+    userName: document.getElementById('emName').value || '익명',
+    channel:  document.getElementById('emChannel').value,
+    score:    document.getElementById('emScore').value,
+    category: document.getElementById('emCat').value,
+    comment:  document.getElementById('emComment').value,
+  };
+  try {
+    await api('/evaluation', { method: 'POST', body: JSON.stringify(body) });
+    showNotif('평가 등록 완료!', 'success');
+    closeModal('evalModal');
+    loadEvaluation();
+  } catch(e) { showNotif('등록 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// 미해결 Top10
+// ══════════════════════════════════════════
+async function loadTop10() {
+  try {
+    const d = await api('/top10');
+    document.getElementById('t10Total').textContent = d.patterns.length;
+    const done = d.patterns.filter(p=>p.resolved).length;
+    document.getElementById('t10Done').textContent = done;
+    document.getElementById('t10Todo').textContent = d.patterns.length - done;
+    document.getElementById('sbTop10').textContent = d.patterns.length - done;
+    renderTop10Table(d.patterns, 'top10Table');
+  } catch(e) { showNotif('Top10 로드 실패','error'); }
+}
+
+function renderTop10Table(patterns, targetId) {
+  const el = document.getElementById(targetId);
+  if (!el || !patterns) return;
+  const max = patterns[0]?.count || 1;
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <tr><th>#</th><th>패턴</th><th>발생 빈도</th><th>FAQ</th><th>상태</th><th>액션</th></tr>
+    ${patterns.map((r,i)=>`<tr>
+      <td><strong style="font-family:Montserrat;font-size:15px;color:${i<3?'var(--accent2)':'var(--gray3)'};">${i+1}</strong></td>
+      <td style="font-weight:600;font-size:12px;">${r.pattern}</td>
+      <td><div style="display:flex;align-items:center;gap:7px;">
+        <div style="width:70px;height:5px;background:var(--gray2);border-radius:3px;overflow:hidden;">
+          <div style="width:${(r.count/max*100).toFixed(0)}%;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));border-radius:3px;"></div>
+        </div>
+        <strong style="color:var(--primary);font-size:13px;">${r.count}건</strong>
+      </div></td>
+      <td style="font-size:11px;color:var(--gray4);">${r.faq||'—'}</td>
+      <td>${r.resolved?'<span class="badge ok">✅ 완료</span>':'<span class="badge warn">⬜ 예정</span>'}</td>
+      <td>${r.resolved?'—':`<button class="btn btn-primary btn-sm" onclick="resolveTop(${r.id||i+1})">갱신</button>`}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+async function resolveTop(id) {
+  try {
+    await api('/top10/' + id, { method: 'PATCH' });
+    showNotif('KB 갱신 완료 표시! ✅','success');
+    loadTop10();
+    if (document.getElementById('page-p4').classList.contains('active')) loadP4();
+  } catch(e) { showNotif('처리 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// 챗봇 테스트
+// ══════════════════════════════════════════
+async function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  appendMsg(val, 'user');
+  inp.value = '';
+  const channel  = document.getElementById('testChannel').value;
+  const userName = document.getElementById('testUserName').value;
+  try {
+    const typing = appendMsg('...', 'bot', true);
+    const d = await api('/chat/test', {
+      method: 'POST',
+      body: JSON.stringify({ input: val, userName, channel }),
+    });
+    typing.remove();
+    appendMsg(d.response, 'bot');
+    if (d.source) {
+      const src = document.createElement('div');
+      src.className = 'msg-src';
+      src.textContent = `📎 ${d.source} | ${d.situation} | 점수:${(d.searchScore||0).toFixed(3)} | ${d.elapsed}ms`;
+      document.getElementById('chatMsgs').appendChild(src);
+    }
+    // 분석 패널
+    const lr = document.getElementById('lastResult');
+    if (lr) lr.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:8px;background:var(--sky);border-radius:7px;"><strong>상황 분류</strong><br><span style="color:var(--primary);">${d.situation}</span></div>
+        <div style="padding:8px;background:var(--gray1);border-radius:7px;"><strong>검색 점수</strong><br>${(d.searchScore||0).toFixed(3)}</div>
+        <div style="padding:8px;background:${d.resolved?'rgba(16,185,129,.08)':'rgba(239,68,68,.08)'};border-radius:7px;"><strong>해결 여부</strong><br>${d.resolved?'✅ 해결':'❌ 미해결'}</div>
+        <div style="padding:8px;background:var(--gray1);border-radius:7px;"><strong>출처</strong><br>${d.source||'없음'}</div>
+        <div style="padding:8px;background:var(--gray1);border-radius:7px;"><strong>응답시간</strong><br>${d.elapsed}ms</div>
+        ${d.issues?.length?`<div style="padding:8px;background:#FFF8E1;border-radius:7px;"><strong>검증 이슈</strong><br>${d.issues.map(i=>i.type).join(', ')}</div>`:''}
+      </div>`;
+    scrollChat();
+  } catch(e) {
+    appendMsg('API 연결 오류: 서버가 실행 중인지 확인해 주세요.', 'bot');
+    scrollChat();
+  }
+}
+
+function appendMsg(text, type, temp=false) {
+  const msgs = document.getElementById('chatMsgs');
+  const div  = document.createElement('div');
+  div.className = `msg-${type}`;
+  div.innerHTML = text.replace(/\n/g,'<br>');
+  if (temp) div.style.opacity = '0.5';
+  msgs.appendChild(div);
+  scrollChat();
+  return div;
+}
+function scrollChat() { const m = document.getElementById('chatMsgs'); if(m) m.scrollTop = m.scrollHeight; }
+function quickSend(q) { document.getElementById('chatInput').value = q; sendChat(); }
+function clearChat() { document.getElementById('chatMsgs').innerHTML = '<div class="msg-bot">채팅이 초기화됐어요 😊 다시 질문해 주세요!</div>'; }
+
+// ══════════════════════════════════════════
+// 대화 로그
+// ══════════════════════════════════════════
+async function loadLogs() {
+  try {
+    const d = await api('/logs');
+    const el = document.getElementById('logsTable');
+    if (!el) return;
+    el.innerHTML = `<div class="tbl-wrap"><table>
+      <tr><th>#</th><th>채널</th><th>입력</th><th>상황</th><th>점수</th><th>해결</th><th>출처</th><th>시간</th></tr>
+      ${d.logs.map(l=>`<tr>
+        <td>${l.id}</td>
+        <td><span class="badge ${l.channel==='kakao'?'ok':'info'}">${l.channel}</span></td>
+        <td style="font-size:12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.input}</td>
+        <td style="font-size:11px;">${l.situation}</td>
+        <td style="font-family:Montserrat;font-weight:700;color:var(--primary);">${l.score.toFixed(3)}</td>
+        <td>${l.resolved?'<span class="badge ok">✅</span>':'<span class="badge warn">❌</span>'}</td>
+        <td style="font-size:10px;color:var(--gray4);">${l.source||'—'}</td>
+        <td style="font-size:10px;color:var(--gray4);white-space:nowrap;">${timeAgo(l.createdAt)}</td>
+      </tr>`).join('')}
+    </table></div>`;
+  } catch(e) { showNotif('로그 로드 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// P1 진단 렌더
+// ══════════════════════════════════════════
+async function loadP1() {
+  try {
+    const d = await api('/pipeline');
+    if (d.p1) {
+      ['d','r','t','l'].forEach(k => {
+        const el = document.getElementById('p1'+k);
+        if (el) el.textContent = d.p1[k];
+      });
+      const tot = document.getElementById('p1Total');
+      if (tot) tot.textContent = d.p1.score;
+      const prog = document.getElementById('p1Progress');
+      if (prog) {
+        const vars = [{k:'D',v:d.p1.d,c:'var(--primary)'},{k:'R',v:d.p1.r,c:'var(--accent)'},{k:'T',v:d.p1.t,c:'var(--accent2)'},{k:'L',v:d.p1.l,c:'var(--green)'}];
+        prog.innerHTML = vars.map(x=>`
+          <div class="prog-wrap">
+            <div class="prog-label"><span>${x.k} — ${{D:'문서 정제',R:'RAG 검색',T:'3톤 분리',L:'폐곡선'}[x.k]}</span><span style="font-weight:700;color:${x.c}">${x.v}/2.0</span></div>
+            <div class="prog-bar"><div class="prog-fill" style="width:${x.v/2*100}%;background:${x.c}"></div></div>
+          </div>`).join('');
+      }
+    }
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+// 설정 페이지
+// ══════════════════════════════════════════
+async function checkChroma() {
+  const el = document.getElementById('chromaStatus');
+  if (el) el.textContent = '연결 확인 중...';
+  try {
+    const d = await api('/engine');
+    if (el) el.innerHTML = d.chromaStatus === 'online'
+      ? '<span style="color:var(--green);">✅ ChromaDB 온라인</span>'
+      : '<span style="color:var(--yellow);">⚠️ ChromaDB 오프라인 — TF-IDF 폴백 모드</span>';
+  } catch(e) { if(el) el.textContent = '확인 실패'; }
+}
+
+// ══════════════════════════════════════════
+// 유틸
+// ══════════════════════════════════════════
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function showNotif(msg, type='info') {
+  const n = document.getElementById('notif');
+  n.textContent = msg;
+  n.className   = `notif ${type} show`;
+  setTimeout(() => n.classList.remove('show'), 3200);
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff/60000);
+  if (m < 1) return '방금 전';
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m/60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h/24)}일 전`;
+}
+
+function updateTime() {
+  const now = new Date();
+  const el = document.getElementById('nowTime');
+  if (el) el.textContent = now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+}
+
+function refreshAll() {
+  const active = document.querySelector('.page.active')?.id?.replace('page-','');
+  if (active) goPage(active);
+  showNotif('새로고침 완료 ✅','success');
+}
+
+// ══════════════════════════════════════════
+// 초기화
+// ══════════════════════════════════════════
+window.addEventListener('load', async () => {
+  updateTime();
+  setInterval(updateTime, 30000);
+  // Webhook URL 자동 설정
+  const wu = document.getElementById('webhookUrl');
+  if (wu) wu.value = location.origin + '/webhook/kakao';
+  // 초기 데이터 로드
+  await loadDashboard();
+  loadP1();
+  // P1 진단 초기값
+  document.getElementById('p1Progress').innerHTML = [
+    {k:'D 문서 정제',v:1.0,max:2,c:'var(--primary)'},
+    {k:'R RAG 검색',v:1.0,max:2,c:'var(--accent)'},
+    {k:'T 3톤 분리',v:1.5,max:2,c:'var(--accent2)'},
+    {k:'L 폐곡선',v:1.0,max:2,c:'var(--green)'},
+  ].map(x=>`<div class="prog-wrap">
+    <div class="prog-label"><span>${x.k}</span><span style="font-weight:700;color:${x.c}">${x.v}/${x.max}</span></div>
+    <div class="prog-bar"><div class="prog-fill" style="width:${x.v/x.max*100}%;background:${x.c}"></div></div>
+  </div>`).join('');
+});
+</script>
+</body>
+</html>

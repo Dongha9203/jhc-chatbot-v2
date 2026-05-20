@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(pip install *)",
+      "PowerShell(cd \"C:\\\\Users\\\\wased\\\\Desktop\\\\JHC_Honey_ChatbotDev_v2\\\\jhc-chatbot-v2\"; $env:PYTHONUTF8=1; python scripts/init-chromadb.py 2>&1)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v2/heartbeat\" -TimeoutSec 3; \"ChromaDB 응답: $\\($r.StatusCode\\) — $\\($r.Content\\)\" } catch { \"ChromaDB 응답 없음: $_\" })",
+      "PowerShell($tcp = New-Object System.Net.Sockets.TcpClient; try { $tcp.Connect\\(\"localhost\", 8000\\); \"포트 8000 열림\" } catch { \"포트 8000 닫힘\" } finally { $tcp.Close\\(\\) })",
+      "PowerShell(Start-Sleep -Seconds 5; $tcp = New-Object System.Net.Sockets.TcpClient; try { $tcp.Connect\\(\"localhost\", 8000\\); \"ChromaDB 포트 8000 정상\" } catch { \"포트 8000 아직 미응답\" } finally { $tcp.Close\\(\\) })",
+      "PowerShell($r = [System.Net.WebRequest]::Create\\(\"http://localhost:8000/api/v2/heartbeat\"\\); $r.Method = \"GET\"; try { $resp = $r.GetResponse\\(\\); $stream = $resp.GetResponseStream\\(\\); $reader = New-Object System.IO.StreamReader\\($stream\\); \"v2 heartbeat: $\\($reader.ReadToEnd\\(\\)\\)\" } catch { \"v2 heartbeat 실패: $\\($_.Exception.Message\\)\" })",
+      "Bash(node src/api/dashboard-server.js)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(node src/api/server.js)",
+      "Bash(curl *)",
+      "Bash(node -e ' *)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)"
+    ]
+  }
+}

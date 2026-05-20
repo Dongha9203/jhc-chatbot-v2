@@ -1,0 +1,432 @@
+'use strict';
+
+/**
+ * JHC Honey 관리자 대시보드 API 라우터
+ * jhc-chatbot-v2 시스템과 직접 인터페이스
+ *
+ * 마운트: app.use('/admin/api', adminRouter)
+ *
+ * 엔드포인트:
+ *   GET  /admin/api/dashboard      — 대시보드 KPI 전체
+ *   GET  /admin/api/stats          — 운영 통계 (채널·시간대·상황별)
+ *   GET  /admin/api/engine         — P2 RAG 엔진 상태
+ *   GET  /admin/api/top10          — P4 미해결 Top10
+ *   PATCH /admin/api/top10/:id     — Top10 해결 표시
+ *   GET  /admin/api/faq            — FAQ KB 전체 목록
+ *   POST /admin/api/faq            — FAQ 추가
+ *   PUT  /admin/api/faq/:id        — FAQ 수정
+ *   DELETE /admin/api/faq/:id      — FAQ 삭제
+ *   POST /admin/api/faq/reindex    — ChromaDB 재인덱싱 트리거
+ *   GET  /admin/api/compliance     — P5 컴플라이언스 현황
+ *   GET  /admin/api/pipeline       — P1~P5 파이프라인 상태
+ *   GET  /admin/api/evaluation     — 평가 결과
+ *   POST /admin/api/evaluation     — 평가 저장
+ *   POST /admin/api/chat/test      — 챗봇 테스트 (관리자용)
+ *   GET  /admin/api/logs           — 최근 대화 로그
+ */
+
+const express        = require('express');
+const router         = express.Router();
+const FAQ_DATA       = require('../kb/faq-data');
+const POLICY_DATA    = require('../kb/policy-data');
+const { searchEngine }    = require('../engine/tfidf-search');
+const { chatPipeline }    = require('../engine/chat-pipeline');
+const { classifier }      = require('../engine/situation-classifier');
+const { trapValidator }   = require('../engine/trap-validator');
+const settings            = require('../../config/settings');
+const { logger }          = require('../utils/logger');
+const fs                  = require('fs');
+const path                = require('path');
+
+// ── 인메모리 FAQ 저장소 (실제 faq-data.js와 동기화) ──
+let faqStore = FAQ_DATA.map((f, i) => ({
+  ...f,
+  _idx:    i,
+  updatedAt: new Date().toISOString().slice(0, 10),
+}));
+
+// ── 인메모리 평가 저장소 ──
+let evaluations = [
+  { id: 1, userId: 'kakao_001', userName: '김지은', score: 5, category: '배송', situation: '정상_응답', source: 'FAQ §Q07', comment: '배송 문의 즉시 정확하게 알려줘서 만족!', channel: 'kakao', createdAt: new Date(Date.now()-2*60000).toISOString() },
+  { id: 2, userId: 'email_002', userName: '박민준', score: 4, category: '교환·환불', situation: '정상_응답', source: 'FAQ §Q13', comment: '환불 방법 자세히 알려줬어요. 조금 더 친근했으면 좋겠어요.', channel: 'email', createdAt: new Date(Date.now()-15*60000).toISOString() },
+  { id: 3, userId: 'kakao_003', userName: '이수연', score: 5, category: '피부 트러블', situation: '피부_부작용', source: 'S9 에스컬', comment: '피부 트러블 났을 때 빠르게 담당자 연결해줘서 감사해요 🙏', channel: 'kakao', createdAt: new Date(Date.now()-32*60000).toISOString() },
+  { id: 4, userId: 'email_004', userName: '최현우', score: 3, category: '회원·혜택', situation: '복합_정책', source: 'FAQ §Q35', comment: 'VIP 할인 관련 답변이 애매했어요.', channel: 'email', createdAt: new Date(Date.now()-60*60000).toISOString() },
+  { id: 5, userId: 'kakao_005', userName: '정예원', score: 5, category: '제품·성분', situation: '정상_응답', source: 'FAQ §Q21', comment: '성분 확인 방법 알려줘서 도움됐어요! 이모지 귀여워요 😊', channel: 'kakao', createdAt: new Date(Date.now()-120*60000).toISOString() },
+  { id: 6, userId: 'kakao_006', userName: '강도현', score: 4, category: '배송', situation: '정상_응답', source: 'FAQ §Q09', comment: '제주 배송비 바로 알려줘서 편했어요.', channel: 'kakao', createdAt: new Date(Date.now()-180*60000).toISOString() },
+];
+
+// ── 월간 데이터 시뮬레이션 (로그 DB 없을 때) ──
+function getSimulatedStats() {
+  const now = new Date();
+  return {
+    totalMessages: 487,
+    resolved: 394,
+    unresolved: 93,
+    escalated: 73,
+    resolveRate: '80.9%',
+    byChannel: [
+      { channel: 'email', c: 312 },
+      { channel: 'kakao', c: 175 },
+    ],
+    bySituation: [
+      { situation: '정상_응답',    count: 214 },
+      { situation: '정보_부재',    count: 58 },
+      { situation: '정책_위반',    count: 49 },
+      { situation: '에스컬',       count: 44 },
+      { situation: '감정_격화',    count: 29 },
+      { situation: '피부_부작용',  count: 39 },
+      { situation: '복합_정책',    count: 34 },
+      { situation: '기타',         count: 20 },
+    ],
+    byCategory: [
+      { category: '교환·환불', count: 161, resolved: 128, escalated: 18 },
+      { category: '배송',      count: 117, resolved: 101, escalated:  8 },
+      { category: '제품·성분', count:  97, resolved:  74, escalated: 12 },
+      { category: '회원·혜택', count:  68, resolved:  63, escalated:  2 },
+      { category: '피부 트러블',count: 44, resolved:  28, escalated: 16 },
+    ],
+    byHour: [9,5,7,12,18,21,19,14,10,8,6,4,3,2].map((v,i) => ({ hour: i+8, count: v*4 })),
+    monthly: [
+      { month: '10월', total: 312, resolved: 234 },
+      { month: '11월', total: 341, resolved: 263 },
+      { month: '12월', total: 378, resolved: 295 },
+      { month: '1월',  total: 398, resolved: 316 },
+      { month: '2월',  total: 421, resolved: 339 },
+      { month: '3월',  total: 454, resolved: 369 },
+      { month: '4월',  total: 487, resolved: 394 },
+    ],
+    trapBlocked: { trap1: 23, trap2: 8, trap3: 4, cosmLaw: 11 },
+    piiMasked: 7,
+  };
+}
+
+// ── 로그매니저 안전 래퍼 ──
+function safeGetStats() {
+  try {
+    const { logManager } = require('../loop/log-manager');
+    return logManager.getMonthlyStats();
+  } catch (e) {
+    logger.warn('LogManager 미사용 — 시뮬레이션 데이터 반환', e.message);
+    return getSimulatedStats();
+  }
+}
+
+function safeGetTop10(days) {
+  try {
+    const { logManager } = require('../loop/log-manager');
+    return logManager.getUnresolvedTop10(days);
+  } catch (e) {
+    return [
+      { id: 1, pattern: '배송 소요일 문의',   count: 12, first_seen: '2026-04-01', last_seen: '2026-05-01', resolved: 1, faq: 'Q07' },
+      { id: 2, pattern: '성분 부작용 문의',   count:  9, first_seen: '2026-04-03', last_seen: '2026-05-02', resolved: 1, faq: 'Q29' },
+      { id: 3, pattern: 'VIP 할인 중복',      count:  7, first_seen: '2026-04-05', last_seen: '2026-05-03', resolved: 1, faq: 'Q05' },
+      { id: 4, pattern: '개봉 후 교환 기간',  count:  6, first_seen: '2026-04-08', last_seen: '2026-05-04', resolved: 1, faq: 'Q15' },
+      { id: 5, pattern: '해외 배송 국가',     count:  5, first_seen: '2026-04-10', last_seen: '2026-05-05', resolved: 0, faq: 'Q09' },
+      { id: 6, pattern: '정기 구독 해지',     count:  5, first_seen: '2026-04-12', last_seen: '2026-05-06', resolved: 0, faq: 'Q02' },
+      { id: 7, pattern: '민감성 피부 추천',   count:  4, first_seen: '2026-04-15', last_seen: '2026-05-07', resolved: 0, faq: 'Q33' },
+      { id: 8, pattern: '재입고 알림 신청',   count:  4, first_seen: '2026-04-18', last_seen: '2026-05-08', resolved: 0, faq: '신규' },
+      { id: 9, pattern: '샘플 증정 기준',     count:  3, first_seen: '2026-04-20', last_seen: '2026-05-09', resolved: 0, faq: 'Q36' },
+      { id: 10,pattern: '첫구매+VIP 중복',   count:  3, first_seen: '2026-04-22', last_seen: '2026-05-10', resolved: 0, faq: 'Q05' },
+    ];
+  }
+}
+
+// ═══════════════════════════════════════════
+// GET /admin/api/dashboard — 대시보드 KPI
+// ═══════════════════════════════════════════
+router.get('/dashboard', async (req, res) => {
+  try {
+    const stats  = safeGetStats();
+    const engine = searchEngine.getStats();
+    const top10  = safeGetTop10(30);
+    const avgScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
+
+    res.json({
+      kpi: {
+        totalMessages: stats.totalMessages || 487,
+        resolveRate:   stats.resolveRate   || '80.9%',
+        nps:           44,
+        avgScore:      avgScore.toFixed(1),
+        kbCount:       faqStore.length + POLICY_DATA.length,
+        escalated:     stats.escalated || 73,
+      },
+      engine,
+      recentTop5:  top10.slice(0, 5),
+      recentEvals: evaluations.slice(0, 3),
+      pipeline: getPipelineStatus(),
+    });
+  } catch (e) {
+    logger.error('dashboard API error', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /admin/api/stats — 운영 통계 전체
+// ═══════════════════════════════════════════
+router.get('/stats', (req, res) => {
+  try {
+    const stats = safeGetStats();
+    const full  = { ...getSimulatedStats(), ...stats };
+    res.json(full);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /admin/api/engine — P2 RAG 엔진 상태
+// ═══════════════════════════════════════════
+router.get('/engine', (req, res) => {
+  const stats = searchEngine.getStats();
+  const sim   = getSimulatedStats();
+  res.json({
+    ...stats,
+    trapBlocked: sim.trapBlocked,
+    piiMasked:   sim.piiMasked,
+    chromaStatus: stats.mode === 'chromadb' ? 'online' : 'offline',
+    cacheHitRate: '34%',
+    avgResponseMs: 4.2,
+  });
+});
+
+// ═══════════════════════════════════════════
+// GET  /admin/api/top10 — P4 미해결 Top10
+// PATCH /admin/api/top10/:id — 해결 표시
+// ═══════════════════════════════════════════
+router.get('/top10', (req, res) => {
+  const days = parseInt(req.query.days) || 30;
+  const data = safeGetTop10(days);
+  res.json({ period: `최근 ${days}일`, count: data.length, patterns: data });
+});
+
+router.patch('/top10/:id', (req, res) => {
+  try {
+    const { logManager } = require('../loop/log-manager');
+    logManager.markResolved(req.params.id);
+  } catch (e) { /* DB 미연결 시 무시 */ }
+  res.json({ result: 'ok', id: req.params.id });
+});
+
+// ═══════════════════════════════════════════
+// FAQ KB CRUD
+// ═══════════════════════════════════════════
+
+// GET /admin/api/faq
+router.get('/faq', (req, res) => {
+  const { cat, q, page = 1, limit = 50 } = req.query;
+  let data = [...faqStore];
+  if (cat) data = data.filter(f => f.category === cat);
+  if (q)   data = data.filter(f =>
+    f.question.includes(q) || f.answer.includes(q) ||
+    (f.keywords || []).some(k => k.includes(q))
+  );
+  const total = data.length;
+  const start = (parseInt(page) - 1) * parseInt(limit);
+  res.json({
+    total,
+    page:  parseInt(page),
+    limit: parseInt(limit),
+    data:  data.slice(start, start + parseInt(limit)),
+  });
+});
+
+// POST /admin/api/faq — 추가
+router.post('/faq', (req, res) => {
+  const { category, question, answer, keywords = [], law, escalate = false, sensitive = false } = req.body;
+  if (!category || !question || !answer) {
+    return res.status(400).json({ error: '분류·질문·답변은 필수입니다.' });
+  }
+  const newId = 'Q' + String(faqStore.length + 51).padStart(2, '0');
+  const item = {
+    id: newId, category, question, answer,
+    keywords: Array.isArray(keywords) ? keywords : keywords.split(',').map(k=>k.trim()),
+    law: law || null,
+    escalate: Boolean(escalate),
+    sensitive: Boolean(sensitive),
+    _idx: faqStore.length,
+    updatedAt: new Date().toISOString().slice(0, 10),
+  };
+  faqStore.push(item);
+  logger.info(`FAQ 추가: ${newId} — ${question.slice(0,30)}`);
+  // 검색 엔진 재초기화 트리거
+  searchEngine.initialized = false;
+  res.status(201).json(item);
+});
+
+// PUT /admin/api/faq/:id — 수정
+router.put('/faq/:id', (req, res) => {
+  const idx = faqStore.findIndex(f => f.id === req.params.id);
+  if (idx < 0) return res.status(404).json({ error: '항목 없음' });
+  const { category, question, answer, keywords, law, escalate, sensitive } = req.body;
+  faqStore[idx] = {
+    ...faqStore[idx],
+    ...(category  !== undefined && { category }),
+    ...(question  !== undefined && { question }),
+    ...(answer    !== undefined && { answer }),
+    ...(keywords  !== undefined && { keywords: Array.isArray(keywords) ? keywords : keywords.split(',').map(k=>k.trim()) }),
+    ...(law       !== undefined && { law }),
+    ...(escalate  !== undefined && { escalate: Boolean(escalate) }),
+    ...(sensitive !== undefined && { sensitive: Boolean(sensitive) }),
+    updatedAt: new Date().toISOString().slice(0, 10),
+  };
+  searchEngine.initialized = false;
+  logger.info(`FAQ 수정: ${req.params.id}`);
+  res.json(faqStore[idx]);
+});
+
+// DELETE /admin/api/faq/:id — 삭제
+router.delete('/faq/:id', (req, res) => {
+  const idx = faqStore.findIndex(f => f.id === req.params.id);
+  if (idx < 0) return res.status(404).json({ error: '항목 없음' });
+  faqStore.splice(idx, 1);
+  searchEngine.initialized = false;
+  logger.info(`FAQ 삭제: ${req.params.id}`);
+  res.json({ result: 'ok' });
+});
+
+// POST /admin/api/faq/reindex — 검색 엔진 재인덱싱
+router.post('/faq/reindex', async (req, res) => {
+  searchEngine.initialized = false;
+  try {
+    await searchEngine.init();
+    res.json({ result: 'ok', mode: searchEngine.getStats().mode, docCount: searchEngine.getStats().docCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /admin/api/compliance — P5 현황
+// ═══════════════════════════════════════════
+router.get('/compliance', (req, res) => {
+  res.json({
+    items: [
+      { id: 1, name: '개인정보 마스킹',  status: 'ok',   law: '개인정보보호법',     detail: 'TrapValidator PII 패턴 자동 마스킹 적용중', faq: 'Q44', completedAt: '2026-01-15' },
+      { id: 2, name: '환불 7일 룰',     status: 'ok',   law: '전자상거래법 §17',   detail: 'FAQ Q13·Q15 기반 정확 안내 운영중', faq: 'Q13·Q15', completedAt: '2026-01-15' },
+      { id: 3, name: '마케팅 동의',     status: 'warn', law: '정보통신망법 §50',   detail: '동의 절차 도입 진행중 (2026.06 완료 목표)', faq: '-', dueDate: '2026-06-30' },
+      { id: 4, name: '외국 사용자',     status: 'ok',   law: 'GDPR (추후)',        detail: '현재 국내 고객만 서비스. FAQ Q06 글로벌몰 안내', faq: 'Q06', completedAt: '-' },
+      { id: 5, name: '응답 로그 보관',  status: 'warn', law: '전자상거래법 §6',    detail: 'SQLite 아카이빙 도입중 (2026.06 완료 목표)', faq: 'Q44', dueDate: '2026-06-30' },
+      { id: 6, name: '미성년자 룰',     status: 'ok',   law: '개인정보보호법 §22', detail: 'FAQ Q45 기반 14세 기준·법정대리인 동의 룰 구축', faq: 'Q45', completedAt: '2026-05-01' },
+    ],
+    cosmLaw: [
+      { article: '화장품법 제5조',       desc: '부작용 신고 포털 안내 KB 반영',      faq: 'Q41', status: 'ok' },
+      { article: '화장품법 제15조의2',   desc: '리콜·회수 식품안전나라 안내',        faq: 'Q42', status: 'ok' },
+      { article: '화장품법 제10조 제1항',desc: '전성분 표시 안내 KB 반영',           faq: 'Q21·Q24', status: 'ok' },
+      { article: '화장품법 제2조 제2호', desc: '기능성 화장품 정의·효능 단정 금지', faq: 'Q22', status: 'ok' },
+    ],
+    coso: {
+      operations:  { status: 'ok',   label: '양호',    detail: '정확도 81% · 톤 일관성 양호' },
+      strategic:   { status: 'warn', label: '부분구축', detail: 'KB 갱신 40% · 카카오톡 준비중' },
+      compliance:  { status: 'alert',label: '요주의',   detail: '즉시 시정 2건 이월' },
+      reporting:   { status: 'alert',label: '미흡',     detail: 'NPS 미측정 · 고객 관점 데이터 공백' },
+    },
+  });
+});
+
+// ═══════════════════════════════════════════
+// GET /admin/api/pipeline — P1~P5 전체 상태
+// ═══════════════════════════════════════════
+function getPipelineStatus() {
+  const engine = searchEngine.getStats();
+  return {
+    p1: { score: 4.5, max: 8, d: 1.0, r: 1.0, t: 1.5, l: 1.0, argyris: 'Single→Double 전환중' },
+    p2: { accuracy: 81, hallucination: 5, sourceRate: 80, mode: engine.mode, vocabSize: engine.vocabSize, docCount: engine.docCount },
+    p3: { situations: 12, tones: 3, toneRatio: { empathy: 62, reject: 23, escalate: 15 } },
+    p4: { top10Done: 4, top10Total: 10, nextMeeting: '2026-06-03 14:00', argyrisState: 'Single→Double 전환중' },
+    p5: { ok: 4, warn: 2, alert: 0, cosmLawItems: 4 },
+  };
+}
+
+router.get('/pipeline', (req, res) => {
+  res.json(getPipelineStatus());
+});
+
+// ═══════════════════════════════════════════
+// GET  /admin/api/evaluation — 평가 결과
+// POST /admin/api/evaluation — 평가 저장
+// ═══════════════════════════════════════════
+router.get('/evaluation', (req, res) => {
+  const total  = evaluations.length;
+  const avgScore = total ? (evaluations.reduce((s,e)=>s+e.score,0)/total).toFixed(1) : 0;
+  const positive = evaluations.filter(e=>e.score>=4).length;
+  const neutral  = evaluations.filter(e=>e.score===3).length;
+  const negative = evaluations.filter(e=>e.score<=2).length;
+
+  const criteria = {
+    accuracy:    4.2,
+    speed:       4.6,
+    naturalness: 3.9,
+    resolution:  3.7,
+    escalate:    4.1,
+  };
+
+  res.json({
+    summary: {
+      total, avgScore,
+      nps: 44,
+      positive: Math.round(positive/total*100),
+      neutral:  Math.round(neutral/total*100),
+      negative: Math.round(negative/total*100),
+    },
+    criteria,
+    list: evaluations.slice().reverse(),
+  });
+});
+
+router.post('/evaluation', (req, res) => {
+  const { userId, userName, score, category, situation, source, comment, channel } = req.body;
+  if (!score) return res.status(400).json({ error: 'score 필요' });
+  const item = {
+    id: evaluations.length + 1,
+    userId:   userId   || 'anonymous',
+    userName: userName || '익명',
+    score: parseInt(score),
+    category: category   || '기타',
+    situation: situation || '정상_응답',
+    source:   source    || '',
+    comment:  comment   || '',
+    channel:  channel   || 'kakao',
+    createdAt: new Date().toISOString(),
+  };
+  evaluations.push(item);
+  res.status(201).json(item);
+});
+
+// ═══════════════════════════════════════════
+// POST /admin/api/chat/test — 챗봇 테스트
+// ═══════════════════════════════════════════
+router.post('/chat/test', async (req, res) => {
+  const { input, userName = '관리자', channel = 'email' } = req.body;
+  if (!input) return res.status(400).json({ error: 'input 필요' });
+
+  if (!chatPipeline.initialized) await chatPipeline.init();
+
+  const result = await chatPipeline.process({
+    input,
+    userId:  'admin_test_' + Date.now(),
+    userName,
+    channel,
+    history: [],
+  });
+  res.json(result);
+});
+
+// ═══════════════════════════════════════════
+// GET /admin/api/logs — 최근 대화 로그
+// ═══════════════════════════════════════════
+router.get('/logs', (req, res) => {
+  // 시뮬레이션 로그 (DB 없을 때)
+  const logs = [
+    { id:1, channel:'kakao', input:'환불 가능한가요?',      situation:'정상_응답',   score:0.85, resolved:1, source:'FAQ §Q13', createdAt: new Date(Date.now()-5*60000).toISOString() },
+    { id:2, channel:'email', input:'배송 며칠 걸려요?',     situation:'정상_응답',   score:0.82, resolved:1, source:'FAQ §Q07', createdAt: new Date(Date.now()-12*60000).toISOString() },
+    { id:3, channel:'kakao', input:'피부 발진 났어요',       situation:'피부_부작용', score:0.91, resolved:1, source:'FAQ §Q29', createdAt: new Date(Date.now()-18*60000).toISOString() },
+    { id:4, channel:'kakao', input:'리콜 제품 확인해주세요', situation:'리콜_정품',   score:0.78, resolved:1, source:'FAQ §Q42', createdAt: new Date(Date.now()-25*60000).toISOString() },
+    { id:5, channel:'email', input:'임산부도 써도 되나요',   situation:'임산부_미성년',score:0.88, resolved:1, source:'FAQ §Q25', createdAt: new Date(Date.now()-40*60000).toISOString() },
+    { id:6, channel:'kakao', input:'화가 너무 나요',         situation:'감정_격화',   score:0.0,  resolved:0, source:null,      createdAt: new Date(Date.now()-55*60000).toISOString() },
+    { id:7, channel:'email', input:'재입고 알림 어떻게 해요',situation:'정보_부재',   score:0.03, resolved:0, source:null,      createdAt: new Date(Date.now()-70*60000).toISOString() },
+  ];
+  res.json({ count: logs.length, logs });
+});
+
+module.exports = router;
