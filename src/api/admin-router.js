@@ -416,17 +416,37 @@ router.post('/chat/test', async (req, res) => {
 // GET /admin/api/logs — 최근 대화 로그
 // ═══════════════════════════════════════════
 router.get('/logs', (req, res) => {
-  // 시뮬레이션 로그 (DB 없을 때)
-  const logs = [
-    { id:1, channel:'kakao', input:'환불 가능한가요?',      situation:'정상_응답',   score:0.85, resolved:1, source:'FAQ §Q13', createdAt: new Date(Date.now()-5*60000).toISOString() },
-    { id:2, channel:'email', input:'배송 며칠 걸려요?',     situation:'정상_응답',   score:0.82, resolved:1, source:'FAQ §Q07', createdAt: new Date(Date.now()-12*60000).toISOString() },
-    { id:3, channel:'kakao', input:'피부 발진 났어요',       situation:'피부_부작용', score:0.91, resolved:1, source:'FAQ §Q29', createdAt: new Date(Date.now()-18*60000).toISOString() },
-    { id:4, channel:'kakao', input:'리콜 제품 확인해주세요', situation:'리콜_정품',   score:0.78, resolved:1, source:'FAQ §Q42', createdAt: new Date(Date.now()-25*60000).toISOString() },
-    { id:5, channel:'email', input:'임산부도 써도 되나요',   situation:'임산부_미성년',score:0.88, resolved:1, source:'FAQ §Q25', createdAt: new Date(Date.now()-40*60000).toISOString() },
-    { id:6, channel:'kakao', input:'화가 너무 나요',         situation:'감정_격화',   score:0.0,  resolved:0, source:null,      createdAt: new Date(Date.now()-55*60000).toISOString() },
-    { id:7, channel:'email', input:'재입고 알림 어떻게 해요',situation:'정보_부재',   score:0.03, resolved:0, source:null,      createdAt: new Date(Date.now()-70*60000).toISOString() },
+  const limit  = Math.min(parseInt(req.query.limit) || 50, 200);
+  const offset = parseInt(req.query.offset) || 0;
+  const channel = req.query.channel;  // 'kakao' | 'email' | undefined
+
+  try {
+    const { logManager } = require('../loop/log-manager');
+
+    let sql  = 'SELECT * FROM chat_logs';
+    const params = [];
+    if (channel) { sql += ' WHERE channel = ?'; params.push(channel); }
+    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const logs  = logManager.db.prepare(sql).all(...params);
+    const total = logManager.db.prepare(
+      channel ? 'SELECT COUNT(*) as c FROM chat_logs WHERE channel = ?' : 'SELECT COUNT(*) as c FROM chat_logs'
+    ).get(...(channel ? [channel] : [])).c;
+
+    return res.json({ total, count: logs.length, offset, logs, source: 'sqlite' });
+  } catch (e) {
+    logger.warn('logs API — SQLite 미연결, 시뮬레이션 반환:', e.message);
+  }
+
+  // SQLite 미연결 시 시뮬레이션 폴백
+  const simLogs = [
+    { id:1, channel:'kakao', input:'환불 가능한가요?',       situation:'정상_응답',    search_score:0.85, resolved:1, source:'FAQ §Q13', created_at: new Date(Date.now()-5*60000).toISOString() },
+    { id:2, channel:'kakao', input:'피부 발진 났어요',        situation:'피부_부작용',  search_score:0.91, resolved:1, source:'FAQ §Q29', created_at: new Date(Date.now()-18*60000).toISOString() },
+    { id:3, channel:'kakao', input:'리콜 제품 확인해주세요',  situation:'리콜_정품',    search_score:0.78, resolved:1, source:'FAQ §Q42', created_at: new Date(Date.now()-25*60000).toISOString() },
+    { id:4, channel:'kakao', input:'화가 너무 나요',          situation:'감정_격화',    search_score:0.0,  resolved:0, source:null,       created_at: new Date(Date.now()-55*60000).toISOString() },
   ];
-  res.json({ count: logs.length, logs });
+  res.json({ total: simLogs.length, count: simLogs.length, offset: 0, logs: simLogs, source: 'simulation' });
 });
 
 module.exports = router;
