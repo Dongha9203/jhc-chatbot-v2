@@ -317,11 +317,7 @@ app.post('/admin/api/chat/test', async (req, res) => {
     const result = await proxyPost('/admin/chat', { input, userName, channel });
     return res.json(result);
   } catch(_) {
-    // 챗봇 서버 미실행 시 로컬 처리
-    const { chatPipeline } = require('../engine/chat-pipeline');
-    if (!chatPipeline.initialized) await chatPipeline.init();
-    const result = await chatPipeline.process({ input, userId:'admin_'+Date.now(), userName, channel, history:[] });
-    res.json(result);
+    res.status(503).json({ error: '챗봇 서버(포트 3000)가 실행되지 않았습니다. node src/api/server.js 를 먼저 시작해주세요.' });
   }
 });
 
