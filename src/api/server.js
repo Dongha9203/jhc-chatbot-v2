@@ -127,6 +127,22 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: '서버 오류가 발생했습니다.' });
 });
 
+// ── Render 슬립 방지 자가 핑 (14분 간격) ──
+function startKeepAlive() {
+  const selfUrl = process.env.RENDER_EXTERNAL_URL || process.env.SELF_URL;
+  if (!selfUrl) return; // 로컬 환경에서는 실행 안 함
+  const INTERVAL = 14 * 60 * 1000; // 14분
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${selfUrl}/health`);
+      logger.info(`[KeepAlive] ping ${res.status}`);
+    } catch (e) {
+      logger.warn(`[KeepAlive] ping 실패: ${e.message}`);
+    }
+  }, INTERVAL);
+  logger.info(`[KeepAlive] 시작 — ${selfUrl}/health 14분 간격`);
+}
+
 // ── 서버 시작 ──
 async function startServer() {
   await chatPipeline.init();
@@ -138,6 +154,7 @@ async function startServer() {
     logger.info(`검색 엔진: ${searchEngine.getStats().mode}`);
     logger.info(`Webhook: POST /webhook/kakao`);
     logger.info(`관리자: GET /admin/stats`);
+    startKeepAlive();
   });
 }
 
