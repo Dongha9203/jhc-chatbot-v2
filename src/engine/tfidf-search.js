@@ -123,9 +123,10 @@ class TFIDFSearchEngine {
       ? await this._chromaSearch(normalized, opts)
       : this._inMemorySearch(normalized, opts);
 
-    // 키워드 부스팅
-    const boosted = this._keywordBoost(results, normalized);
-    const topK    = boosted.slice(0, settings.search.topK);
+    // 키워드 부스팅 → minScore 필터 순서 (부스팅이 필터 기준을 통과시킬 수 있도록)
+    const boosted  = this._keywordBoost(results, normalized);
+    const filtered = boosted.filter(r => r.score >= settings.search.minScore);
+    const topK     = filtered.slice(0, settings.search.topK);
 
     if (topK.length > 0) nodeCache.set(cacheKey, topK);
     return topK;
@@ -164,7 +165,7 @@ class TFIDFSearchEngine {
     }
   }
 
-  // ── 인메모리 TF-IDF 검색 (폴백) ──
+  // ── 인메모리 TF-IDF 검색 (폴백) — minScore 필터는 키워드 부스팅 후 적용 ──
   _inMemorySearch(query, opts) {
     const qVec = this.embedder.transform(query);
     return this.inMemoryDocs
@@ -173,7 +174,6 @@ class TFIDFSearchEngine {
         ...doc,
         score: this.embedder.cosineSimilarity(qVec, doc.vector),
       }))
-      .filter(d => d.score >= settings.search.minScore)
       .sort((a, b) => b.score - a.score);
   }
 

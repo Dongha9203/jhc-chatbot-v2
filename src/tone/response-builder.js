@@ -36,7 +36,7 @@ class ResponseBuilder {
       case SITUATIONS.S7: return this._buildRepeat(honorific, searchResults, history, channel);
       case SITUATIONS.S8: return this._buildPraise(honorific, channel);
       case SITUATIONS.S9: return this._buildSkinTrouble(honorific, channel);
-      case SITUATIONS.S10:return this._buildRecallAuth(honorific, channel);
+      case SITUATIONS.S10:return this._buildRecallAuth(honorific, searchResults, channel);
       case SITUATIONS.S11:return this._buildMinorPregn(honorific, channel);
       case SITUATIONS.S12:return this._buildComplex(honorific, searchResults, channel);
       default:             return this._buildNoInfo(honorific, channel);
@@ -185,7 +185,25 @@ class ResponseBuilder {
   }
 
   // ── 상황10: 리콜·정품 확인 (FAQ Q42·Q43) ──
-  _buildRecallAuth(hon, ch) {
+  // KB 검색 결과 1위 기준으로 응답, 없을 때만 통합 안내 fallback
+  _buildRecallAuth(hon, results, ch) {
+    const top = results?.[0];
+
+    if (top) {
+      const src = top.source || 'KB';
+      const law = top.law ? `\n📋 법적 근거: ${top.law}` : '';
+      if (ch === 'kakao') {
+        return `${hon}, 확인 도와드릴게요! 🔍\n${top.answer}\n📎 ${src}${law}`;
+      }
+      return [
+        `${hon}, 확인 도와드릴게요! 🔍`,
+        '',
+        top.answer,
+        `📎 출처: ${src}${law}`,
+      ].join('\n');
+    }
+
+    // KB 결과 없을 때 통합 안내
     if (ch === 'kakao') {
       return `${hon}, 확인 도와드릴게요! 🔍\n리콜: 식품안전나라 홈페이지 확인\n정품: QR코드·홀로그램 스캔\n📎 FAQ §Q42·Q43`;
     }
