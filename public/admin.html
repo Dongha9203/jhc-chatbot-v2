@@ -597,10 +597,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-top10">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">📋 총 미해결</div><div class="kpi-val blue" id="t10Total">10</div><div class="kpi-trend">이번달 누적</div></div>
-    <div class="kpi-card green"><div class="kpi-label">✅ 갱신 완료</div><div class="kpi-val green" id="t10Done">4</div><div class="kpi-trend"></div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">⬜ 갱신 예정</div><div class="kpi-val yellow" id="t10Todo">6</div><div class="kpi-trend"></div></div>
-    <div class="kpi-card orange"><div class="kpi-label">❗ 즉시 시정</div><div class="kpi-val orange">1건</div><div class="kpi-trend">정책 충돌</div></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">📋 총 미해결</div><div class="kpi-val blue" id="t10Total">10</div><div class="kpi-trend">이번달 누적</div><button class="btn-detail" onclick="showTop10Detail('total')">세부내용</button></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">✅ 갱신 완료</div><div class="kpi-val green" id="t10Done">4</div><div class="kpi-trend"></div><button class="btn-detail" onclick="showTop10Detail('done')">세부내용</button></div>
+    <div class="kpi-card yellow" style="position:relative;"><div class="kpi-label">⬜ 갱신 예정</div><div class="kpi-val yellow" id="t10Todo">6</div><div class="kpi-trend"></div><button class="btn-detail" onclick="showTop10Detail('todo')">세부내용</button></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">❗ 즉시 시정</div><div class="kpi-val orange" id="t10Urgent">—</div><div class="kpi-trend" id="t10UrgentTrend">정책 충돌</div><button class="btn-detail" onclick="showTop10Detail('urgent')">세부내용</button></div>
   </div>
   <div class="card">
     <div class="card-title"><span class="card-icon">❗</span>미해결 Top10 — P4 폐곡선 월간 SOP
@@ -1795,16 +1795,110 @@ async function saveEval() {
 // ══════════════════════════════════════════
 // 미해결 Top10
 // ══════════════════════════════════════════
+let _top10Data = null;
+const URGENT_KEYWORDS = ['중복','정책','위반','충돌','환불불가','법','규정','이중','강제'];
+function isUrgent(pattern) {
+  return URGENT_KEYWORDS.some(k => (pattern||'').includes(k));
+}
+
 async function loadTop10() {
   try {
     const d = await api('/top10');
-    document.getElementById('t10Total').textContent = d.patterns.length;
-    const done = d.patterns.filter(p=>p.resolved).length;
-    document.getElementById('t10Done').textContent = done;
-    document.getElementById('t10Todo').textContent = d.patterns.length - done;
-    document.getElementById('sbTop10').textContent = d.patterns.length - done;
-    renderTop10Table(d.patterns, 'top10Table');
+    _top10Data = d;
+    const patterns = d.patterns || [];
+    document.getElementById('t10Total').textContent = patterns.length;
+    const done    = patterns.filter(p => p.resolved).length;
+    const urgList = patterns.filter(p => !p.resolved && isUrgent(p.pattern));
+    document.getElementById('t10Done').textContent    = done;
+    document.getElementById('t10Todo').textContent    = patterns.length - done;
+    document.getElementById('sbTop10').textContent    = patterns.length - done;
+    document.getElementById('t10Urgent').textContent  = urgList.length + '건';
+    document.getElementById('t10UrgentTrend').textContent = urgList.length > 0 ? '정책·규정 관련' : '해당 없음';
+    renderTop10Table(patterns, 'top10Table');
   } catch(e) { showNotif('Top10 로드 실패','error'); }
+}
+
+function showTop10Detail(type) {
+  const d = _top10Data || {};
+  const patterns  = d.patterns || [];
+  const doneList  = patterns.filter(p => p.resolved);
+  const todoList  = patterns.filter(p => !p.resolved);
+  const urgList   = patterns.filter(p => !p.resolved && isUrgent(p.pattern));
+  const normalTodo = todoList.filter(p => !isUrgent(p.pattern));
+
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const patRows = (list, emptyMsg) => list.length === 0
+    ? `<tr><td colspan="2" style="color:#94A3B8;font-size:11px;text-align:center;">${emptyMsg}</td></tr>`
+    : list.map((p, i) => `<tr>
+        <td style="font-size:11px;"><strong style="color:var(--gray4);margin-right:4px;">${i+1}.</strong>${p.pattern}</td>
+        <td><span class="sd-badge ${p.resolved ? 'green' : isUrgent(p.pattern) ? 'orange' : 'yellow'}">${p.count}건 · ${p.resolved ? '완료' : isUrgent(p.pattern) ? '즉시 시정' : '예정'}</span></td>
+      </tr>`).join('');
+
+  const configs = {
+    total: {
+      title: '📋 총 미해결 — 세부내용',
+      desc: '이번 달 누적된 미해결 패턴 전체 목록입니다. 고객이 반복적으로 질문했지만 챗봇이 KB에서 답변을 찾지 못한 항목들입니다. 빈도가 높을수록 KB 갱신 우선순위가 높습니다.',
+      summary: [
+        row('전체 패턴', patterns.length + '건', 'blue'),
+        row('갱신 완료', doneList.length + '건', 'green'),
+        row('갱신 예정', normalTodo.length + '건', 'yellow'),
+        row('즉시 시정', urgList.length + '건', urgList.length > 0 ? 'orange' : 'gray'),
+      ],
+      list: patterns,
+      emptyMsg: '미해결 패턴 없음',
+    },
+    done: {
+      title: '✅ 갱신 완료 — 세부내용',
+      desc: 'KB에 답변이 추가·수정되어 해결 완료 처리된 패턴입니다. 다음 SOP 미팅에서 실제 미해결 건수가 감소했는지 효과를 검증합니다.',
+      summary: [
+        row('완료 건수', doneList.length + '건', 'green'),
+        row('전체 대비', patterns.length ? Math.round(doneList.length / patterns.length * 100) + '%' : '—', 'blue'),
+        row('최근 완료', doneList[0]?.last_seen?.slice(0,10) || '—', 'gray'),
+      ],
+      list: doneList,
+      emptyMsg: '갱신 완료 항목 없음',
+    },
+    todo: {
+      title: '⬜ 갱신 예정 — 세부내용',
+      desc: 'KB에 아직 반영되지 않은 일반 미해결 패턴입니다. 빈도순으로 정렬되어 있으며 다음 SOP 미팅 전까지 처리를 목표로 합니다. 즉시 시정 항목(정책·규정 충돌)은 별도 관리합니다.',
+      summary: [
+        row('예정 건수', normalTodo.length + '건', 'yellow'),
+        row('즉시 시정 제외', urgList.length + '건 별도 관리', urgList.length > 0 ? 'orange' : 'gray'),
+        row('처리 목표', '2026년 6월 3일 SOP 미팅 전', 'blue'),
+      ],
+      list: normalTodo,
+      emptyMsg: '갱신 예정 항목 없음',
+    },
+    urgent: {
+      title: '❗ 즉시 시정 — 세부내용',
+      desc: '정책·규정·할인 중복 등 즉각 대응이 필요한 패턴입니다. 고객에게 잘못된 정보를 제공하거나 정책 충돌이 발생할 수 있어 담당자가 즉시 확인·처리해야 합니다.',
+      summary: [
+        row('즉시 시정 건수', urgList.length + '건', urgList.length > 0 ? 'orange' : 'green'),
+        row('분류 기준', '정책·중복·위반·규정 키워드 포함', 'blue'),
+        row('처리 방법', '담당자 즉시 확인 후 KB 반영', 'orange'),
+        row('처리 우선순위', '갱신 예정 항목보다 먼저 처리', 'orange'),
+      ],
+      list: urgList,
+      emptyMsg: '즉시 시정 항목 없음 ✅',
+    },
+  };
+
+  const cfg = configs[type];
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.summary.join('')}</tbody>
+     </table>
+     <div style="margin-top:14px;font-size:11px;font-weight:700;color:var(--dark);border-bottom:1px solid var(--gray2);padding-bottom:4px;margin-bottom:8px;">패턴 목록</div>
+     <table class="sd-table">
+       <thead><tr><th>패턴</th><th>빈도 · 상태</th></tr></thead>
+       <tbody>${patRows(cfg.list, cfg.emptyMsg)}</tbody>
+     </table>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 function renderTop10Table(patterns, targetId) {
