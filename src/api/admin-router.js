@@ -173,13 +173,25 @@ router.get('/stats', async (req, res) => {
     const sim   = getSimulatedStats();
     const stats = await safeGetStats();
     // 실데이터 우선, 실데이터에 없는 항목만 시뮬레이션으로 폴백
+    const hasReal = stats && stats.totalMessages > 0;
     res.json({
-      ...sim,
-      ...stats,
-      bySituation: (stats.bySituation && stats.bySituation.length > 0) ? stats.bySituation : sim.bySituation,
-      byHour:      (stats.byHour      && stats.byHour.length > 0)      ? stats.byHour      : sim.byHour,
-      monthly:     (stats.monthly     && stats.monthly.length > 0)     ? stats.monthly     : sim.monthly,
-      byChannel:   (stats.byChannel   && stats.byChannel.length > 0)   ? stats.byChannel   : sim.byChannel,
+      // 실데이터 기본값, 없을 때만 시뮬로 폴백
+      totalMessages: stats.totalMessages ?? sim.totalMessages,
+      resolved:      stats.resolved      ?? sim.resolved,
+      unresolved:    stats.unresolved    ?? sim.unresolved,
+      escalated:     stats.escalated     ?? sim.escalated,
+      resolveRate:   stats.resolveRate   ?? sim.resolveRate,
+      period:        stats.period        ?? sim.period,
+      bySituation: (stats.bySituation?.length > 0) ? stats.bySituation : (hasReal ? [] : sim.bySituation),
+      byHour:      (stats.byHour?.length > 0)      ? stats.byHour      : (hasReal ? [] : sim.byHour),
+      monthly:     (stats.monthly?.length > 0)     ? stats.monthly     : (hasReal ? [] : sim.monthly),
+      byChannel:   (stats.byChannel?.length > 0)   ? stats.byChannel   : (hasReal ? [] : sim.byChannel),
+      // byCategory는 DB에서 추적하지 않으므로 노출 안 함
+      byCategory:   null,
+      // trapBlocked·piiMasked는 엔진 내부 카운터이므로 실데이터 없음 명시
+      trapBlocked:  null,
+      piiMasked:    null,
+      top10Unresolved: stats.top10Unresolved ?? [],
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
