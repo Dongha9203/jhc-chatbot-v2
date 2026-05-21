@@ -106,6 +106,7 @@ body{font-family:'Noto Sans KR',sans-serif;color:var(--text);background:var(--gr
 .sd-badge.green{background:#ECFDF5;color:var(--green);}
 .sd-badge.orange{background:#FFF7ED;color:var(--accent2);}
 .sd-badge.gray{background:var(--gray2);color:var(--gray4);}
+.sd-badge.yellow{background:#FFFBEB;color:var(--yellow);}
 
 /* ── CARD ── */
 .card{background:#fff;border-radius:var(--radius);border:1px solid var(--gray2);padding:20px;transition:box-shadow .22s;margin-bottom:16px;}
@@ -417,10 +418,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p4">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">✅ 갱신 완료</div><div class="kpi-val blue" id="p4done">4</div><div class="kpi-trend">건</div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">⬜ 갱신 예정</div><div class="kpi-val yellow" id="p4todo">6</div><div class="kpi-trend">건</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">📅 다음 SOP 미팅</div><div class="kpi-val teal" style="font-size:18px;">6월 3일</div><div class="kpi-trend">화요일 14:00</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">🔄 Argyris 상태</div><div class="kpi-val orange" style="font-size:16px;">전환중</div><div class="kpi-trend">Single→Double Loop</div></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">✅ 갱신 완료</div><div class="kpi-val blue" id="p4done">4</div><div class="kpi-trend">건</div><button class="btn-detail" onclick="showP4Detail('done')">세부내용</button></div>
+    <div class="kpi-card yellow" style="position:relative;"><div class="kpi-label">⬜ 갱신 예정</div><div class="kpi-val yellow" id="p4todo">6</div><div class="kpi-trend">건</div><button class="btn-detail" onclick="showP4Detail('todo')">세부내용</button></div>
+    <div class="kpi-card teal" style="position:relative;"><div class="kpi-label">📅 다음 SOP 미팅</div><div class="kpi-val teal" style="font-size:18px;">6월 3일</div><div class="kpi-trend">화요일 14:00</div><button class="btn-detail" onclick="showP4Detail('sop')">세부내용</button></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">🔄 Argyris 상태</div><div class="kpi-val orange" style="font-size:16px;">전환중</div><div class="kpi-trend">Single→Double Loop</div><button class="btn-detail" onclick="showP4Detail('argyris')">세부내용</button></div>
   </div>
   <div class="card">
     <div class="card-title"><span class="card-icon">🔄</span>월간 폐곡선 SOP 단계</div>
@@ -1089,14 +1090,88 @@ async function loadP3() {
 // ══════════════════════════════════════════
 // P4 폐곡선
 // ══════════════════════════════════════════
+let _p4Data = null;
 async function loadP4() {
   try {
     const d = await api('/top10');
+    _p4Data = d;
     renderTop10Table(d.patterns, 'p4Top10');
     const done = d.patterns.filter(p=>p.resolved).length;
     document.getElementById('p4done').textContent = done;
     document.getElementById('p4todo').textContent = d.patterns.length - done;
   } catch(e) { showNotif('P4 로드 실패','error'); }
+}
+
+function showP4Detail(type) {
+  const d = _p4Data || {};
+  const patterns = d.patterns || [];
+  const doneList = patterns.filter(p => p.resolved);
+  const todoList = patterns.filter(p => !p.resolved);
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+  const patRow = (p, i) =>
+    `<tr><td>${i+1}. ${p.pattern||p.input||'(패턴 없음)'}</td><td><span class="sd-badge ${p.resolved?'green':'orange'}">${p.resolved?'완료':'미완료'}</span></td></tr>`;
+
+  const configs = {
+    done: {
+      title: '✅ 갱신 완료 — 세부내용',
+      desc: 'P4 폐곡선에서 미해결 패턴으로 기록된 항목 중 KB에 답변이 추가·수정되어 갱신 완료 처리된 항목입니다. 갱신 완료 항목은 다음 SOP 미팅 때 효과 검증을 진행합니다.',
+      rows: [
+        row('완료 건수', doneList.length+'건', 'green'),
+        row('전체 패턴 대비', patterns.length ? Math.round(doneList.length/patterns.length*100)+'%' : '—', 'blue'),
+        ...doneList.slice(0,5).map((p,i) => patRow(p,i)),
+        doneList.length > 5 ? `<tr><td colspan="2" style="color:#94A3B8;font-size:11px;">외 ${doneList.length-5}건…</td></tr>` : '',
+      ],
+    },
+    todo: {
+      title: '⬜ 갱신 예정 — 세부내용',
+      desc: '고객 질문이 반복됐지만 아직 KB에 답변이 없거나 부족한 패턴입니다. 다음 SOP 미팅까지 우선순위 순으로 KB에 반영해야 합니다. 질문 빈도가 높을수록 먼저 처리합니다.',
+      rows: [
+        row('미완료 건수', todoList.length+'건', 'orange'),
+        row('갱신 우선순위', todoList.length > 0 ? '빈도 순 정렬' : '없음', 'blue'),
+        ...todoList.slice(0,7).map((p,i) => patRow(p,i)),
+        todoList.length > 7 ? `<tr><td colspan="2" style="color:#94A3B8;font-size:11px;">외 ${todoList.length-7}건…</td></tr>` : '',
+      ],
+    },
+    sop: {
+      title: '📅 다음 SOP 미팅 — 세부내용',
+      desc: 'SOP(Standard Operating Procedure) 미팅은 P4 폐곡선의 핵심입니다. 매월 미해결 Top10을 검토하고 KB 갱신 우선순위를 결정하며, 챗봇 응답 품질 향상 액션 아이템을 확정합니다.',
+      rows: [
+        row('다음 미팅', '2026년 6월 3일 (화)', 'blue'),
+        row('시간', '오후 14:00', 'blue'),
+        row('미팅 목적', 'KB 갱신 검토 및 우선순위 확정', 'green'),
+        row('주요 안건 1', `미해결 패턴 ${todoList.length}건 KB 반영`, todoList.length > 0 ? 'orange' : 'green'),
+        row('주요 안건 2', `갱신 완료 ${doneList.length}건 효과 검증`, 'green'),
+        row('주요 안건 3', 'Argyris Double-Loop 전환 조건 점검', 'blue'),
+        row('참석자', '챗봇 운영팀, CS팀, KB 관리자', 'gray'),
+        row('다음 정기 미팅', '2026년 7월 1일 예정', 'gray'),
+      ],
+    },
+    argyris: {
+      title: '🔄 Argyris 상태 — 세부내용',
+      desc: 'Argyris Double-Loop Learning은 조직 학습 이론입니다. Single-Loop는 오류를 수정하는 단순 적응, Double-Loop는 정책·목표 자체를 재검토하는 심층 학습입니다. 챗봇 KB 갱신율 60% 이상, 정확도 85% 이상 달성 시 Double-Loop로 전환됩니다.',
+      rows: [
+        row('현재 상태', '전환중 (Single→Double)', 'orange'),
+        row('현재 정확도', '81%', 'yellow'),
+        row('Double-Loop 전환 조건 1', 'KB 갱신율 60% 이상', todoList.length <= patterns.length * 0.4 ? 'green' : 'orange'),
+        row('Double-Loop 전환 조건 2', 'NPS 점수 48점 이상', 'orange'),
+        row('Double-Loop 전환 조건 3', '정확도 85% 이상', 'orange'),
+        row('Single-Loop 현황', '오류 감지 → KB 수정 반복', 'blue'),
+        row('Double-Loop 목표', '응답 정책·톤 전략 자체 재설계', 'blue'),
+        row('전환 예상 시점', '2026 Q2 완료 후', 'gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 // ══════════════════════════════════════════
