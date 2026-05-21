@@ -186,8 +186,8 @@ router.get('/stats', async (req, res) => {
       byHour:      (stats.byHour?.length > 0)      ? stats.byHour      : (hasReal ? [] : sim.byHour),
       monthly:     (stats.monthly?.length > 0)     ? stats.monthly     : (hasReal ? [] : sim.monthly),
       byChannel:   (stats.byChannel?.length > 0)   ? stats.byChannel   : (hasReal ? [] : sim.byChannel),
-      // byCategory는 DB에서 추적하지 않으므로 노출 안 함
-      byCategory:   null,
+      // byCategory: DB 실데이터 (category 컬럼 추적), 없으면 빈 배열
+      byCategory:  (stats.byCategory?.length > 0) ? stats.byCategory : (hasReal ? [] : sim.byCategory),
       // trapBlocked·piiMasked는 엔진 내부 카운터이므로 실데이터 없음 명시
       trapBlocked:  null,
       piiMasked:    null,

@@ -99,13 +99,14 @@ class WebhookHandler {
     // ── 로그 기록 (P4 폐곡선) ──
     await logManager.save({
       userId,
-      channel: 'kakao',
-      input:    utterance,
-      response: result.response,
-      situation: result.situation,
+      channel:     'kakao',
+      input:       utterance,
+      response:    result.response,
+      situation:   result.situation,
       searchScore: result.searchScore,
-      resolved: result.resolved,
-      source:   result.source,
+      resolved:    result.resolved,
+      source:      result.source,
+      category:    result.category,
     });
 
     // ── 카카오톡 응답 형식으로 변환 ──

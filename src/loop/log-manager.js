@@ -28,7 +28,7 @@ class LogManager {
   }
 
   // ── 로그 저장 ──
-  async save({ userId, channel, input, response, situation, searchScore, resolved, source, escalated }) {
+  async save({ userId, channel, input, response, situation, searchScore, resolved, source, escalated, category }) {
     if (!this.client) return;
     try {
       const { data, error } = await this.client
@@ -43,6 +43,7 @@ class LogManager {
           resolved:     resolved  ? 1 : 0,
           source:       source   || '',
           escalated:    escalated ? 1 : 0,
+          category:     category || null,
         })
         .select('id')
         .single();
