@@ -162,4 +162,13 @@ startServer().catch(err => {
   process.exit(1);
 });
 
+// Render 무료 플랜 슬립 방지 — 10분마다 셀프핑
+if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+  setInterval(() => {
+    fetch(`${process.env.RENDER_EXTERNAL_URL}/health`)
+      .catch(err => logger.warn('셀프핑 실패', { error: err.message }));
+  }, 10 * 60 * 1000);
+  logger.info(`슬립 방지 셀프핑 활성화: ${process.env.RENDER_EXTERNAL_URL}/health`);
+}
+
 module.exports = { app };
