@@ -515,7 +515,7 @@ tr:hover td{background:var(--sky);}
     </div>
     <div class="card">
       <div class="card-title"><span class="card-icon">🕐</span>시간대별 분포</div>
-      <div class="chart-wrap"><svg id="hourChart" viewBox="0 0 420 140" style="width:100%;display:block;"></svg></div>
+      <div class="chart-wrap"><svg id="hourChart" viewBox="0 0 520 190" style="width:100%;display:block;"></svg></div>
     </div>
   </div>
   <div class="card">
@@ -1221,30 +1221,77 @@ async function loadStats() {
     document.getElementById('stEscRate').textContent  = `에스컬률 ${Math.round(d.escalated/d.totalMessages*100)}%`;
     // 채널별 차트
     const cc = document.getElementById('channelChart');
-    if (cc && d.byChannel) {
-      const max = Math.max(...d.byChannel.map(c=>c.c));
-      cc.innerHTML = `<svg viewBox="0 0 360 160" style="width:100%;display:block;background:var(--gray1);border-radius:10px;">` +
-        d.byChannel.map((c,i)=>{
-          const h = (c.c/max)*110;
-          const x = 60+i*120;
-          return `<rect x="${x}" y="${140-h}" width="70" height="${h}" rx="6" fill="${i===0?'var(--primary)':'var(--accent)'}" opacity=".9"/>
-            <text x="${x+35}" y="${140-h-6}" text-anchor="middle" font-size="11" font-weight="700" fill="${i===0?'var(--primary)':'var(--accent)}'}">${c.c}건</text>
-            <text x="${x+35}" y="155" text-anchor="middle" font-size="10" fill="#64748b">${c.channel}</text>`;
-        }).join('') + `</svg>`;
+    if (cc && d.byChannel && d.byChannel.length > 0) {
+      const total = d.byChannel.reduce((s,c)=>s+c.c,0)||1;
+      const max = Math.max(...d.byChannel.map(c=>c.c),1);
+      const COLORS=['#1B5FA8','#00C4B4','#FF6B35','#6366F1','#10B981'];
+      const W=400,H=210,L=44,R=16,T=30,B=52;
+      const cW=W-L-R, cH=H-T-B;
+      const n=d.byChannel.length;
+      const gap=cW/Math.max(n,1);
+      const bw=Math.min(60,Math.max(30,gap*0.55));
+      const yLabels=[0,25,50,75,100].map(p=>{
+        const y=T+cH-p/100*cH;
+        const v=Math.round(max*p/100);
+        return `<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#E2E8F0" stroke-width="${p===0?1.5:1}"/>
+          <text x="${L-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#94A3B8">${v}</text>`;
+      }).join('');
+      const bars=d.byChannel.map((c,i)=>{
+        const bh=Math.max(c.c/max*cH,2);
+        const x=L+i*gap+(gap-bw)/2;
+        const y=T+cH-bh;
+        const pct=(c.c/total*100).toFixed(0)+'%';
+        const col=COLORS[i%COLORS.length];
+        return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="5" fill="${col}"/>
+          <text x="${x+bw/2}" y="${y-18}" text-anchor="middle" font-size="12" fill="${col}" font-weight="800">${c.c}건</text>
+          <text x="${x+bw/2}" y="${y-5}" text-anchor="middle" font-size="9" fill="#94A3B8">${pct}</text>
+          <text x="${x+bw/2}" y="${T+cH+18}" text-anchor="middle" font-size="11" fill="#334155" font-weight="600">${c.channel}</text>`;
+      }).join('');
+      cc.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;">
+        <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#F5F7FA"/>
+        <text x="${W/2}" y="16" text-anchor="middle" font-size="9" fill="#94A3B8">채널별 문의 건수 (최근 30일 합계 ${total}건)</text>
+        ${yLabels}${bars}</svg>`;
+    } else if (cc) {
+      cc.innerHTML='<div style="text-align:center;color:#94A3B8;padding:40px 0;font-size:13px;">데이터 없음</div>';
     }
-    // 시간대 차트
-    if (d.byHour) {
+    // 시간대별 차트
+    if (d.byHour && d.byHour.length > 0) {
       const hsvg = document.getElementById('hourChart');
       if (hsvg) {
-        const max2 = Math.max(...d.byHour.map(h=>h.count));
-        hsvg.innerHTML = d.byHour.map((h,i)=>{
-          const ht = (h.count/max2)*100;
-          const x = 20+i*(380/d.byHour.length);
-          const w = 380/d.byHour.length-2;
-          return `<rect x="${x}" y="${120-ht}" width="${w}" height="${ht}" rx="3" fill="var(--primary)" opacity="${0.3+h.count/max2*0.7}"/>
-            <text x="${x+w/2}" y="135" font-size="8" fill="#64748b" text-anchor="middle">${h.hour}</text>`;
+        const max2=Math.max(...d.byHour.map(h=>h.count),1);
+        const W=520,H=190,L=42,R=12,T=32,B=44;
+        const cW=W-L-R, cH=H-T-B;
+        const n=d.byHour.length;
+        const slot=cW/Math.max(n,1);
+        const bw=Math.max(6,slot*0.7);
+        const yLines=[0,25,50,75,100].map(p=>{
+          const y=T+cH-p/100*cH;
+          const v=Math.round(max2*p/100);
+          return `<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#E2E8F0" stroke-width="${p===0?1.5:1}"/>
+            <text x="${L-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#94A3B8">${v}</text>`;
         }).join('');
+        const bars=d.byHour.map((h,i)=>{
+          const bh=Math.max(h.count/max2*cH,1);
+          const x=L+i*slot+(slot-bw)/2;
+          const y=T+cH-bh;
+          const hr=parseInt(h.hour);
+          const isPeak=h.count===max2;
+          const isBiz=hr>=9&&hr<18;
+          const col=isPeak?'#FF6B35':isBiz?'#1B5FA8':'#94A3B8';
+          const cnt=h.count>0?`<text x="${x+bw/2}" y="${y-3}" text-anchor="middle" font-size="8" fill="${col}" font-weight="700">${h.count}</text>`:'';
+          const showLbl=hr%3===0||isPeak;
+          const lbl=showLbl?`<text x="${x+bw/2}" y="${T+cH+15}" text-anchor="middle" font-size="${isPeak?10:9}" fill="${isPeak?'#FF6B35':'#64748B'}" font-weight="${isPeak?'700':'400'}">${String(hr).padStart(2,'0')}시</text>`:'';
+          return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="2" fill="${col}" opacity="0.9"/>
+            ${cnt}${lbl}`;
+        }).join('');
+        const leg=`<text x="${W-R}" y="16" text-anchor="end" font-size="9"><tspan fill="#FF6B35">■</tspan><tspan fill="#64748B"> 피크  </tspan><tspan fill="#1B5FA8">■</tspan><tspan fill="#64748B"> 업무(9-18)  </tspan><tspan fill="#94A3B8">■</tspan><tspan fill="#64748B"> 기타</tspan></text>`;
+        hsvg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+        hsvg.innerHTML=`<rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#F5F7FA"/>${yLines}${bars}${leg}`;
       }
+    } else if (document.getElementById('hourChart')) {
+      const hsvg=document.getElementById('hourChart');
+      hsvg.setAttribute('viewBox','0 0 520 190');
+      hsvg.innerHTML='<rect x="0" y="0" width="520" height="190" rx="10" fill="#F5F7FA"/><text x="260" y="100" text-anchor="middle" font-size="13" fill="#94A3B8">데이터 없음</text>';
     }
     // 분류별 테이블
     const ct = document.getElementById('catStatsTable');
