@@ -8,6 +8,16 @@
 
 const { koreanUtils } = require('../utils/korean-utils');
 
+// 한국어 문법 불용어 — 의미 없는 어미·조사·보조동사
+const KO_STOPWORDS = new Set([
+  '하나요','인가요','할까요','나요','세요','해요','이에요','예요','어요',
+  '해야','하면','하고','해서','하는','하여','하지','하니','하다','했다',
+  '있나요','없나요','됩니까','됩니다','합니다','합니까','어느','어떤',
+  '있어요','없어요','인지','하기','하게','하던','했어','했는','해줘',
+  '주세요','드릴까','알려줘','알려주','궁금해','궁금한','어디서','어디에',
+  '어떻게','무엇을','무엇이','뭔가요','뭔지','무엇','어디','얼마나',
+]);
+
 class TFIDFEmbedder {
   constructor() {
     this.vocabulary = new Map();   // 단어 → 인덱스
@@ -21,8 +31,8 @@ class TFIDFEmbedder {
   tokenize(text) {
     if (!text) return [];
     const normalized = koreanUtils.normalize(text);
-    // 공백 분리 단어 (2자 이상)
-    const words = normalized.split(/\s+/).filter(w => w.length >= 2);
+    // 공백 분리 단어 (2자 이상, 불용어 제외)
+    const words = normalized.split(/\s+/).filter(w => w.length >= 2 && !KO_STOPWORDS.has(w));
 
     // 단어 간 bigram (문맥 포착)
     const bigrams = [];
@@ -39,7 +49,7 @@ class TFIDFEmbedder {
         for (let n = 2; n <= 3; n++) {
           for (let i = 0; i <= word.length - n; i++) {
             const ng = word.slice(i, i + n);
-            if (ng.length >= 2) charNgrams.push(ng);
+            if (ng.length >= 2 && !KO_STOPWORDS.has(ng)) charNgrams.push(ng);
           }
         }
       }
