@@ -875,9 +875,12 @@ document.querySelectorAll('.nav-item[data-page]').forEach(el => {
 // ══════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════
+let _dashData = null, _dashStats = null;
 async function loadDashboard() {
   try {
     const [data, stats] = await Promise.all([api('/dashboard'), api('/stats')]);
+    _dashData  = data;
+    _dashStats = stats;
     renderDashKpi(data.kpi, stats);
     renderPipeline(data.pipeline, 'dashPipeline');
     renderTrendChart(stats.monthly);
@@ -890,6 +893,109 @@ async function loadDashboard() {
   } catch (e) {
     showNotif('대시보드 로드 실패: ' + e.message, 'error');
   }
+}
+
+function showDashDetail(type) {
+  const kpi   = _dashData?.kpi   || {};
+  const stats = _dashStats        || {};
+  const row   = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const total      = stats.totalMessages  || kpi.totalMessages || 0;
+  const resolved   = stats.resolved       || 0;
+  const unresolved = stats.unresolved     || (total - resolved);
+  const escalated  = kpi.escalated        || stats.escalated || 0;
+  const resolveRate = kpi.resolveRate     || '—';
+  const nps        = kpi.nps              || 0;
+  const kbCount    = kpi.kbCount          || 0;
+  const avgScore   = kpi.avgScore         || '—';
+
+  // 채널별 상위 3개
+  const byChannel = (stats.byChannel || []).slice(0, 4);
+  const chRows = byChannel.length
+    ? byChannel.map(c => row(c.channel || c.name, (c.count||c.total||0)+'건', 'blue')).join('')
+    : row('채널 데이터', '수집중', 'gray');
+
+  // 전월 대비 계산
+  const mn = stats.monthly || [];
+  let trendRow = row('전월 대비', '데이터 수집중', 'gray');
+  if (mn.length >= 2) {
+    const curr = mn[mn.length-1]?.total || 0;
+    const prev = mn[mn.length-2]?.total || 0;
+    if (prev > 0) {
+      const pct = Math.round((curr - prev) / prev * 100);
+      trendRow = row('전월 대비', (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '%', pct >= 0 ? 'orange' : 'green');
+    }
+  }
+
+  const configs = {
+    total: {
+      title: '📬 이번달 총 문의 — 세부내용',
+      desc: '이번 달(최근 30일) 카카오·이메일 등 모든 채널에서 접수된 고객 문의 총 건수입니다. 자동 해결·에스컬·미해결 건수로 세분화됩니다.',
+      rows: [
+        row('총 문의', total + '건', 'blue'),
+        row('자동 해결', resolved + '건', 'green'),
+        row('미해결', unresolved + '건', unresolved > 0 ? 'orange' : 'green'),
+        row('에스컬(담당자 연결)', escalated + '건', escalated > 0 ? 'yellow' : 'gray'),
+        row('평균 평가 점수', avgScore + '점', 'blue'),
+        trendRow,
+        `<tr><td colspan="2" style="font-size:10px;font-weight:700;color:var(--gray4);padding-top:8px;">채널별 분포</td></tr>`,
+        chRows,
+      ],
+    },
+    resolve: {
+      title: '✅ 자동 해결률 — 세부내용',
+      desc: '챗봇이 KB 검색으로 답변을 제공해 담당자 개입 없이 자동 해결한 비율입니다. 현재 목표는 93%이며, SEARCH_MIN_SCORE(0.25) 이상의 유사도를 가진 경우 해결로 기록됩니다.',
+      rows: [
+        row('현재 해결률', resolveRate, parseFloat(resolveRate) >= 93 ? 'green' : parseFloat(resolveRate) >= 80 ? 'yellow' : 'orange'),
+        row('목표 해결률', '93% (2026 Q2)', 'blue'),
+        row('자동 해결 건수', resolved + '건', 'green'),
+        row('미해결 건수', unresolved + '건', unresolved > 0 ? 'orange' : 'green'),
+        row('에스컬 건수', escalated + '건', escalated > 0 ? 'yellow' : 'gray'),
+        row('해결 기준', 'KB 유사도 0.25 이상', 'blue'),
+        row('미해결 처리', 'P4 폐곡선 → KB 갱신', 'blue'),
+        row('93% 달성 예상', 'KB 갱신 완료 후', 'gray'),
+      ],
+    },
+    nps: {
+      title: '⭐ NPS — 세부내용',
+      desc: 'NPS(Net Promoter Score)는 고객 추천 의향을 -100~100점으로 측정합니다. 5점 만점 평가 기준: 4~5점(추천자), 3점(중립), 1~2점(비추천자). NPS = 추천자% − 비추천자%. 점수가 높을수록 고객 만족도가 높습니다.',
+      rows: [
+        row('현재 NPS', nps + '점', nps >= 50 ? 'green' : nps >= 30 ? 'blue' : nps >= 0 ? 'yellow' : 'orange'),
+        row('목표 NPS', '48점 (2026 Q2)', 'blue'),
+        row('NPS 우수 기준', '50점 이상', 'green'),
+        row('NPS 양호 기준', '30~49점', 'blue'),
+        row('NPS 개선 필요', '0~29점', 'yellow'),
+        row('현재 단계', nps >= 48 ? '목표 달성' : '목표 미달 — 개선중', nps >= 48 ? 'green' : 'orange'),
+        row('측정 방법', '챗봇 대화 후 자동 1~5점 평가', 'gray'),
+        row('개선 방안', 'KB 갱신 + P3 톤 개선', 'gray'),
+      ],
+    },
+    kb: {
+      title: '📚 KB 문항 — 세부내용',
+      desc: '챗봇이 답변에 사용하는 지식 베이스(Knowledge Base) 총 문항 수입니다. FAQ 항목과 정책 항목으로 구성되며, 문항이 많고 정확할수록 자동 해결률이 높아집니다.',
+      rows: [
+        row('전체 KB 문항', kbCount + '건', 'blue'),
+        row('FAQ 항목', (kbCount - 5) + '건 (Q01~Q50)', 'green'),
+        row('정책 항목', '5건 (환불·배송·성분 등)', 'green'),
+        row('검색 방식', 'TF-IDF 인메모리 (불용어 25개 필터)', 'blue'),
+        row('최소 유사도 기준', '0.25 (SEARCH_MIN_SCORE)', 'blue'),
+        row('KB 인덱스 크기', '55개 문서', 'blue'),
+        row('갱신 주기', '월 1회 SOP 미팅 후', 'gray'),
+        row('갱신 방법', 'faq-kb.json 수정 → 서버 재시작', 'gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 function renderDashKpi(kpi, stats) {
@@ -910,10 +1016,10 @@ function renderDashKpi(kpi, stats) {
   }
   if (!trendHtml) trendHtml = '데이터 수집중';
   g.innerHTML = `
-    <div class="kpi-card blue"><div class="kpi-label">📬 이번달 총 문의</div><div class="kpi-val blue">${kpi.totalMessages}</div><div class="kpi-trend">${trendHtml}</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">✅ 자동 해결률</div><div class="kpi-val teal">${kpi.resolveRate}</div><div class="kpi-trend up">목표 93%</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">⭐ NPS</div><div class="kpi-val orange">${kpi.nps}</div><div class="kpi-trend">Q1 측정 시작</div></div>
-    <div class="kpi-card green"><div class="kpi-label">📚 KB 문항</div><div class="kpi-val green">${kpi.kbCount}</div><div class="kpi-trend">FAQ+정책</div></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">📬 이번달 총 문의</div><div class="kpi-val blue">${kpi.totalMessages}</div><div class="kpi-trend">${trendHtml}</div><button class="btn-detail" onclick="showDashDetail('total')">세부내용</button></div>
+    <div class="kpi-card teal" style="position:relative;"><div class="kpi-label">✅ 자동 해결률</div><div class="kpi-val teal">${kpi.resolveRate}</div><div class="kpi-trend up">목표 93%</div><button class="btn-detail" onclick="showDashDetail('resolve')">세부내용</button></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">⭐ NPS</div><div class="kpi-val orange">${kpi.nps}</div><div class="kpi-trend">Q1 측정 시작</div><button class="btn-detail" onclick="showDashDetail('nps')">세부내용</button></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">📚 KB 문항</div><div class="kpi-val green">${kpi.kbCount}</div><div class="kpi-trend">FAQ+정책</div><button class="btn-detail" onclick="showDashDetail('kb')">세부내용</button></div>
   `;
 }
 
