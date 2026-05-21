@@ -170,8 +170,17 @@ router.get('/dashboard', async (req, res) => {
 // ═══════════════════════════════════════════
 router.get('/stats', async (req, res) => {
   try {
+    const sim   = getSimulatedStats();
     const stats = await safeGetStats();
-    res.json({ ...getSimulatedStats(), ...stats });
+    // 실데이터 우선, 실데이터에 없는 항목만 시뮬레이션으로 폴백
+    res.json({
+      ...sim,
+      ...stats,
+      bySituation: (stats.bySituation && stats.bySituation.length > 0) ? stats.bySituation : sim.bySituation,
+      byHour:      (stats.byHour      && stats.byHour.length > 0)      ? stats.byHour      : sim.byHour,
+      monthly:     (stats.monthly     && stats.monthly.length > 0)     ? stats.monthly     : sim.monthly,
+      byChannel:   (stats.byChannel   && stats.byChannel.length > 0)   ? stats.byChannel   : sim.byChannel,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -348,51 +357,64 @@ router.get('/pipeline', (req, res) => {
 // GET  /admin/api/evaluation — 평가 결과
 // POST /admin/api/evaluation — 평가 저장
 // ═══════════════════════════════════════════
-router.get('/evaluation', (req, res) => {
-  const total  = evaluations.length;
-  const avgScore = total ? (evaluations.reduce((s,e)=>s+e.score,0)/total).toFixed(1) : 0;
-  const positive = evaluations.filter(e=>e.score>=4).length;
-  const neutral  = evaluations.filter(e=>e.score===3).length;
-  const negative = evaluations.filter(e=>e.score<=2).length;
+router.get('/evaluation', async (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit) || 50, 200);
+    const offset = parseInt(req.query.offset) || 0;
+    const { rows, total, summary } = await logManager.getEvaluations({ limit, offset });
 
-  const criteria = {
-    accuracy:    4.2,
-    speed:       4.6,
-    naturalness: 3.9,
-    resolution:  3.7,
-    escalate:    4.1,
-  };
+    // DB에 데이터가 없으면 인메모리 폴백
+    if (total === 0) {
+      const list = evaluations.slice().reverse();
+      const t    = list.length;
+      const avg  = t ? (list.reduce((s,e)=>s+e.score,0)/t).toFixed(1) : '0.0';
+      return res.json({
+        summary: {
+          total: t, avgScore: avg, nps: 44,
+          positive: Math.round(list.filter(e=>e.score>=4).length/t*100||0),
+          neutral:  Math.round(list.filter(e=>e.score===3).length/t*100||0),
+          negative: Math.round(list.filter(e=>e.score<=2).length/t*100||0),
+        },
+        criteria: { accuracy:4.2, speed:4.6, naturalness:3.9, resolution:3.7, escalate:4.1 },
+        list,
+        source: 'simulation',
+      });
+    }
 
-  res.json({
-    summary: {
-      total, avgScore,
-      nps: 44,
-      positive: Math.round(positive/total*100),
-      neutral:  Math.round(neutral/total*100),
-      negative: Math.round(negative/total*100),
-    },
-    criteria,
-    list: evaluations.slice().reverse(),
-  });
+    const t = total || 0;
+    return res.json({
+      summary: {
+        total: t,
+        avgScore: summary?.avg_score || '0.0',
+        nps: 44,
+        positive: t ? Math.round((summary?.positive||0)/t*100) : 0,
+        neutral:  t ? Math.round((summary?.neutral||0)/t*100)  : 0,
+        negative: t ? Math.round((summary?.negative||0)/t*100) : 0,
+      },
+      criteria: { accuracy:4.2, speed:4.6, naturalness:3.9, resolution:3.7, escalate:4.1 },
+      list: rows,
+      source: 'postgresql',
+    });
+  } catch (e) {
+    logger.error('evaluation GET error', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-router.post('/evaluation', (req, res) => {
+router.post('/evaluation', async (req, res) => {
   const { userId, userName, score, category, situation, source, comment, channel } = req.body;
   if (!score) return res.status(400).json({ error: 'score 필요' });
-  const item = {
-    id: evaluations.length + 1,
-    userId:   userId   || 'anonymous',
-    userName: userName || '익명',
-    score: parseInt(score),
-    category: category   || '기타',
+  await logManager.saveEvaluation({
+    userId:    userId    || 'anonymous',
+    userName:  userName  || '익명',
+    score:     parseInt(score),
+    category:  category  || '기타',
     situation: situation || '정상_응답',
-    source:   source    || '',
-    comment:  comment   || '',
-    channel:  channel   || 'kakao',
-    createdAt: new Date().toISOString(),
-  };
-  evaluations.push(item);
-  res.status(201).json(item);
+    source:    source    || '',
+    comment:   comment   || '',
+    channel:   channel   || 'kakao',
+  });
+  res.status(201).json({ result: 'ok' });
 });
 
 // ═══════════════════════════════════════════
