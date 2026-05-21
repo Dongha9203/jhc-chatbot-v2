@@ -1,5 +1,8 @@
 'use strict';
 
+// Render 무료 플랜은 IPv6 아웃바운드 미지원 → Supabase 연결 시 ENETUNREACH 방지
+require('dns').setDefaultResultOrder('ipv4first');
+
 /**
  * JHC Honey 챗봇 v2 — 메인 진입점
  *
