@@ -821,11 +821,11 @@ document.querySelectorAll('.nav-item[data-page]').forEach(el => {
 // ══════════════════════════════════════════
 async function loadDashboard() {
   try {
-    const data = await api('/dashboard');
-    renderDashKpi(data.kpi);
+    const [data, stats] = await Promise.all([api('/dashboard'), api('/stats')]);
+    renderDashKpi(data.kpi, stats);
     renderPipeline(data.pipeline, 'dashPipeline');
-    renderTrendChart(null); // 시뮬레이션
-    renderDonut();
+    renderTrendChart(stats.monthly);
+    renderDonut(stats.byCategory, stats.totalMessages);
     renderDashTop5(data.recentTop5);
     renderDashEval(data.recentEvals);
     if (data.engine) {
@@ -836,11 +836,25 @@ async function loadDashboard() {
   }
 }
 
-function renderDashKpi(kpi) {
+function renderDashKpi(kpi, stats) {
   const g = document.getElementById('dashKpi');
   if (!g) return;
+  // 전월 대비 실데이터 계산
+  let trendHtml = '';
+  const mn = stats?.monthly;
+  if (mn && mn.length >= 2) {
+    const curr = mn[mn.length-1]?.total || 0;
+    const prev = mn[mn.length-2]?.total || 0;
+    if (prev > 0) {
+      const pct = Math.round((curr - prev) / prev * 100);
+      trendHtml = pct >= 0
+        ? `<span class="up">▲ ${pct}% 전월 대비</span>`
+        : `<span style="color:var(--accent2)">▼ ${Math.abs(pct)}% 전월 대비</span>`;
+    }
+  }
+  if (!trendHtml) trendHtml = '데이터 수집중';
   g.innerHTML = `
-    <div class="kpi-card blue"><div class="kpi-label">📬 이번달 총 문의</div><div class="kpi-val blue">${kpi.totalMessages}</div><div class="kpi-trend up">▲ 12% 전월 대비</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">📬 이번달 총 문의</div><div class="kpi-val blue">${kpi.totalMessages}</div><div class="kpi-trend">${trendHtml}</div></div>
     <div class="kpi-card teal"><div class="kpi-label">✅ 자동 해결률</div><div class="kpi-val teal">${kpi.resolveRate}</div><div class="kpi-trend up">목표 93%</div></div>
     <div class="kpi-card orange"><div class="kpi-label">⭐ NPS</div><div class="kpi-val orange">${kpi.nps}</div><div class="kpi-trend">Q1 측정 시작</div></div>
     <div class="kpi-card green"><div class="kpi-label">📚 KB 문항</div><div class="kpi-val green">${kpi.kbCount}</div><div class="kpi-trend">FAQ+정책</div></div>
@@ -859,17 +873,21 @@ function renderPipeline(p, targetId) {
   `;
 }
 
-function renderTrendChart() {
+function renderTrendChart(monthly) {
   const svg = document.getElementById('trendChart');
   if (!svg) return;
-  const months = ['10월','11월','12월','1월','2월','3월','4월'];
-  const totals  = [312,341,378,398,421,454,487];
-  const solved  = [234,263,295,316,339,369,394];
+  if (!monthly || monthly.length === 0) {
+    svg.innerHTML = `<rect x="0" y="0" width="600" height="160" rx="8" fill="#F8FAFC"/><text x="300" y="86" text-anchor="middle" font-size="13" fill="#94A3B8">대화 누적 후 월간 추이가 표시됩니다</text>`;
+    return;
+  }
+  const months = monthly.map(m => m.month);
+  const totals = monthly.map(m => m.total || 0);
+  const solved = monthly.map(m => m.resolved || 0);
+  const n = months.length;
   const W=600,H=160,px=50,py=20;
-  const mx = Math.max(...totals);
-  const xs = totals.map((_,i)=>px+i*(W-px*2)/6);
+  const mx = Math.max(...totals, 1);
+  const xs = totals.map((_,i) => px + i * (W-px*2) / Math.max(n-1,1));
   const yt = v => H-py-(v/mx)*(H-py*2);
-  const poly = pts => pts.map(p=>p.join(',')).join(' ');
   svg.innerHTML = `
     <defs><linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1B5FA8" stop-opacity=".25"/><stop offset="100%" stop-color="#1B5FA8" stop-opacity="0"/></linearGradient>
     <linearGradient id="gs" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00C4B4" stop-opacity=".2"/><stop offset="100%" stop-color="#00C4B4" stop-opacity="0"/></linearGradient></defs>
@@ -883,26 +901,32 @@ function renderTrendChart() {
   `;
 }
 
-function renderDonut() {
+function renderDonut(byCategory, totalMessages) {
   const svg = document.getElementById('donutChart');
   const leg = document.getElementById('donutLegend');
   if (!svg) return;
-  const cats = [
-    {label:'교환·환불',pct:33,color:'#1B5FA8'},
-    {label:'배송',     pct:24,color:'#00C4B4'},
-    {label:'제품·성분',pct:20,color:'#FF6B35'},
-    {label:'회원·혜택',pct:14,color:'#10B981'},
-    {label:'기타',     pct:9, color:'#F59E0B'},
-  ];
+  const COLORS = ['#1B5FA8','#00C4B4','#FF6B35','#10B981','#F59E0B','#6366F1'];
+  const r=45,cx=60,cy=60,circumference=283;
+  if (!byCategory || byCategory.length === 0) {
+    svg.innerHTML = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E2E8F0" stroke-width="22"/>
+      <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="10" fill="#94A3B8">데이터</text>
+      <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="10" fill="#94A3B8">없음</text>`;
+    if (leg) leg.innerHTML = '<div style="font-size:11px;color:#94A3B8;">대화 누적 후 표시됩니다</div>';
+    return;
+  }
+  const catSum = byCategory.reduce((s,c)=>s+(c.count||0),0)||1;
+  const cats = byCategory.map((c,i)=>({
+    label: c.category, color: COLORS[i%COLORS.length],
+    pct: Math.round(c.count/catSum*100),
+  }));
   let offset=0;
-  const r=45,cx=60,cy=60,total=283; // circumference
   svg.innerHTML = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E2E8F0" stroke-width="22"/>` +
     cats.map(c=>{
-      const dash=c.pct/100*total;
-      const el=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c.color}" stroke-width="22" stroke-dasharray="${dash} ${total}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity=".9"/>`;
+      const dash=c.pct/100*circumference;
+      const el=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c.color}" stroke-width="22" stroke-dasharray="${dash} ${circumference}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity=".9"/>`;
       offset+=dash; return el;
     }).join('') +
-    `<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-weight="900" fill="#1E293B">487</text>
+    `<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-weight="900" fill="#1E293B">${totalMessages||0}</text>
      <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="7" fill="#94a3b8">총 문의</text>`;
   if (leg) leg.innerHTML = cats.map(c=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><div style="width:8px;height:8px;border-radius:50%;background:${c.color};flex-shrink:0;"></div><span>${c.label} ${c.pct}%</span></div>`).join('');
 }
