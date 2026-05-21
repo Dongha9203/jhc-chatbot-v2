@@ -26,6 +26,9 @@ const adminRouter        = require('./admin-router');
 
 const app = express();
 
+// Render(및 일반 리버스 프록시) 뒤에서 X-Forwarded-For 신뢰
+app.set('trust proxy', 1);
+
 // ── 정적 파일 (관리자 대시보드 HTML) ──
 app.use(express.static(path.join(__dirname, '../../public')));
 

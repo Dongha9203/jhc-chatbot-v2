@@ -1,52 +1,59 @@
 'use strict';
 
 /**
- * P4 폐곡선 — 대화 로그 관리 (Supabase PostgreSQL)
- * 미해결 Top10 자동 집계 → KB 갱신 트리거
+ * P4 폐곡선 — 대화 로그 관리 (Supabase JS client, HTTPS)
+ * pg 직접 연결 대신 @supabase/supabase-js 사용 → Render 무료 플랜 IPv4 호환
  */
 
-const { Pool }   = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 const { logger } = require('../utils/logger');
 
 class LogManager {
   constructor() {
-    this.pool = null;
+    this.client = null;
     this._init();
   }
 
   _init() {
-    const url = process.env.DATABASE_URL;
-    if (!url) {
-      logger.warn('DATABASE_URL 미설정 — PostgreSQL 로그 비활성화');
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      logger.warn('SUPABASE_URL/SERVICE_ROLE_KEY 미설정 — DB 로그 비활성화');
       return;
     }
-    this.pool = new Pool({
-      connectionString: url,
-      ssl: { rejectUnauthorized: false },
-      max: 5,
-      idleTimeoutMillis: 30000,
+    this.client = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-    this.pool.on('error', err => logger.error('PostgreSQL 풀 오류', err));
-    logger.info('PostgreSQL 연결 풀 초기화 완료');
+    logger.info('Supabase 클라이언트 초기화 완료');
   }
 
   // ── 로그 저장 ──
   async save({ userId, channel, input, response, situation, searchScore, resolved, source, escalated }) {
-    if (!this.pool) return;
+    if (!this.client) return;
     try {
-      const { rows } = await this.pool.query(
-        `INSERT INTO chat_logs
-           (user_id, channel, input, response, situation, search_score, resolved, source, escalated)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING id`,
-        [userId, channel, input, response, situation,
-         searchScore || 0, resolved ? 1 : 0, source || '', escalated ? 1 : 0]
-      );
+      const { data, error } = await this.client
+        .from('chat_logs')
+        .insert({
+          user_id:      userId,
+          channel,
+          input,
+          response,
+          situation,
+          search_score: searchScore || 0,
+          resolved:     resolved  ? 1 : 0,
+          source:       source   || '',
+          escalated:    escalated ? 1 : 0,
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
       if (!resolved) await this._aggregateUnresolved(input);
-      // 대화 결과 기반 자동 평가 저장 (에스컬=3, 미해결=4, 해결=5)
+
       const autoScore = escalated ? 3 : (resolved ? 5 : 4);
       await this.saveEvaluation({
-        logId: rows[0]?.id, userId, channel,
+        logId: data?.id, userId, channel,
         score: autoScore, situation, source,
       });
     } catch (err) {
@@ -54,71 +61,56 @@ class LogManager {
     }
   }
 
-  // ── 미해결 패턴 집계 ──
+  // ── 미해결 패턴 집계 (atomic upsert via RPC) ──
   async _aggregateUnresolved(input) {
     const key = input.substring(0, 50).trim();
-    const { rows } = await this.pool.query(
-      'SELECT id FROM unresolved_patterns WHERE pattern = $1', [key]
-    );
-    if (rows.length > 0) {
-      await this.pool.query(
-        'UPDATE unresolved_patterns SET count = count + 1, last_seen = NOW() WHERE id = $1',
-        [rows[0].id]
-      );
-    } else {
-      await this.pool.query(
-        'INSERT INTO unresolved_patterns (pattern) VALUES ($1)', [key]
-      );
-    }
+    const { error } = await this.client.rpc('increment_unresolved_pattern', { pattern_key: key });
+    if (error) logger.error('미해결 패턴 집계 오류', error);
   }
 
   // ── 미해결 Top10 조회 ──
   async getUnresolvedTop10(days = 30) {
-    if (!this.pool) return [];
+    if (!this.client) return [];
     try {
-      const { rows } = await this.pool.query(
-        `SELECT pattern, count, first_seen, last_seen
-         FROM unresolved_patterns
-         WHERE resolved = 0
-           AND last_seen >= NOW() - ($1 || ' days')::INTERVAL
-         ORDER BY count DESC
-         LIMIT 10`,
-        [days]
-      );
-      return rows;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await this.client
+        .from('unresolved_patterns')
+        .select('pattern, count, first_seen, last_seen')
+        .eq('resolved', 0)
+        .gte('last_seen', since)
+        .order('count', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
     } catch (err) {
       logger.error('Top10 조회 오류', err);
       return [];
     }
   }
 
-  // ── 월간 통계 ──
+  // ── 월간 통계 (RPC 단일 호출) ──
   async getMonthlyStats() {
-    if (!this.pool) return null;
+    if (!this.client) return null;
     try {
-      const [total, resolved, escalated, byChannel, bySituation, byHour, monthly, top10] = await Promise.all([
-        this.pool.query("SELECT COUNT(*)::int AS c FROM chat_logs WHERE created_at >= NOW() - INTERVAL '30 days'"),
-        this.pool.query("SELECT COUNT(*)::int AS c FROM chat_logs WHERE resolved=1 AND created_at >= NOW() - INTERVAL '30 days'"),
-        this.pool.query("SELECT COUNT(*)::int AS c FROM chat_logs WHERE escalated=1 AND created_at >= NOW() - INTERVAL '30 days'"),
-        this.pool.query("SELECT channel, COUNT(*)::int AS c FROM chat_logs WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY channel"),
-        this.pool.query("SELECT situation, COUNT(*)::int AS count FROM chat_logs WHERE situation IS NOT NULL AND created_at >= NOW() - INTERVAL '30 days' GROUP BY situation ORDER BY count DESC"),
-        this.pool.query("SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Seoul')::int AS hour, COUNT(*)::int AS count FROM chat_logs WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY hour ORDER BY hour"),
-        this.pool.query("SELECT TO_CHAR(DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Seoul'), 'MM월') AS month, COUNT(*)::int AS total, COUNT(CASE WHEN resolved=1 THEN 1 END)::int AS resolved FROM chat_logs GROUP BY DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Seoul') ORDER BY DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Seoul')"),
+      const [statsRes, top10] = await Promise.all([
+        this.client.rpc('get_monthly_stats'),
         this.getUnresolvedTop10(),
       ]);
-      const t = total.rows[0].c;
-      const r = resolved.rows[0].c;
+
+      if (statsRes.error) throw statsRes.error;
+      const s = statsRes.data;
+
       return {
         period:          '최근 30일',
-        totalMessages:   t,
-        resolved:        r,
-        unresolved:      t - r,
-        escalated:       escalated.rows[0].c,
-        resolveRate:     t ? ((r / t) * 100).toFixed(1) + '%' : '0%',
-        byChannel:       byChannel.rows,
-        bySituation:     bySituation.rows,
-        byHour:          byHour.rows,
-        monthly:         monthly.rows,
+        totalMessages:   s.total,
+        resolved:        s.resolved,
+        unresolved:      s.total - s.resolved,
+        escalated:       s.escalated,
+        resolveRate:     s.total ? ((s.resolved / s.total) * 100).toFixed(1) + '%' : '0%',
+        byChannel:       s.byChannel    || [],
+        bySituation:     s.bySituation  || [],
+        byHour:          s.byHour       || [],
+        monthly:         s.monthly      || [],
         top10Unresolved: top10,
       };
     } catch (err) {
@@ -129,14 +121,20 @@ class LogManager {
 
   // ── 평가 저장 ──
   async saveEvaluation({ logId, userId, userName, channel, score, category, situation, source, comment }) {
-    if (!this.pool) return;
+    if (!this.client) return;
     try {
-      await this.pool.query(
-        `INSERT INTO evaluations (log_id, user_id, user_name, channel, score, category, situation, source, comment)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [logId || null, userId || 'anonymous', userName || '고객', channel || 'kakao',
-         score || 3, category || null, situation || null, source || '', comment || '']
-      );
+      const { error } = await this.client.from('evaluations').insert({
+        log_id:    logId    || null,
+        user_id:   userId   || 'anonymous',
+        user_name: userName || '고객',
+        channel:   channel  || 'kakao',
+        score:     score    || 3,
+        category:  category || null,
+        situation: situation || null,
+        source:    source    || '',
+        comment:   comment   || '',
+      });
+      if (error) throw error;
     } catch (err) {
       logger.error('평가 저장 오류', err);
     }
@@ -144,19 +142,22 @@ class LogManager {
 
   // ── 평가 조회 ──
   async getEvaluations({ limit = 50, offset = 0 } = {}) {
-    if (!this.pool) return { rows: [], total: 0, summary: null };
+    if (!this.client) return { rows: [], total: 0, summary: null };
     try {
-      const [rows, count, summary] = await Promise.all([
-        this.pool.query('SELECT * FROM evaluations ORDER BY created_at DESC LIMIT $1 OFFSET $2', [Math.min(limit, 200), offset]),
-        this.pool.query('SELECT COUNT(*)::int AS c FROM evaluations'),
-        this.pool.query(`SELECT
-          ROUND(AVG(score)::numeric, 1) AS avg_score,
-          COUNT(CASE WHEN score>=4 THEN 1 END)::int AS positive,
-          COUNT(CASE WHEN score=3  THEN 1 END)::int AS neutral,
-          COUNT(CASE WHEN score<=2 THEN 1 END)::int AS negative
-          FROM evaluations`),
+      const lim = Math.min(limit, 200);
+      const [rowsRes, countRes, summaryRes] = await Promise.all([
+        this.client.from('evaluations').select('*').order('created_at', { ascending: false }).range(offset, offset + lim - 1),
+        this.client.from('evaluations').select('*', { count: 'exact', head: true }),
+        this.client.rpc('get_eval_summary'),
       ]);
-      return { rows: rows.rows, total: count.rows[0].c, summary: summary.rows[0] };
+      if (rowsRes.error)  throw rowsRes.error;
+      if (countRes.error) throw countRes.error;
+
+      return {
+        rows:    rowsRes.data || [],
+        total:   countRes.count || 0,
+        summary: summaryRes.data || null,
+      };
     } catch (err) {
       logger.error('평가 조회 오류', err);
       return { rows: [], total: 0, summary: null };
@@ -165,24 +166,19 @@ class LogManager {
 
   // ── 최근 로그 조회 ──
   async getLogs({ limit = 50, offset = 0, channel } = {}) {
-    if (!this.pool) return { rows: [], total: 0 };
+    if (!this.client) return { rows: [], total: 0 };
     try {
-      const params = [];
-      let where = '';
-      if (channel) { where = 'WHERE channel = $1'; params.push(channel); }
-
-      const dataParams  = [...params, Math.min(limit, 200), offset];
-      const lIdx = params.length + 1;
-      const oIdx = params.length + 2;
-
-      const [rows, count] = await Promise.all([
-        this.pool.query(
-          `SELECT * FROM chat_logs ${where} ORDER BY created_at DESC LIMIT $${lIdx} OFFSET $${oIdx}`,
-          dataParams
-        ),
-        this.pool.query(`SELECT COUNT(*)::int AS c FROM chat_logs ${where}`, params),
-      ]);
-      return { rows: rows.rows, total: count.rows[0].c };
+      const lim = Math.min(limit, 200);
+      let query      = this.client.from('chat_logs').select('*').order('created_at', { ascending: false }).range(offset, offset + lim - 1);
+      let countQuery = this.client.from('chat_logs').select('*', { count: 'exact', head: true });
+      if (channel) {
+        query      = query.eq('channel', channel);
+        countQuery = countQuery.eq('channel', channel);
+      }
+      const [rowsRes, countRes] = await Promise.all([query, countQuery]);
+      if (rowsRes.error)  throw rowsRes.error;
+      if (countRes.error) throw countRes.error;
+      return { rows: rowsRes.data || [], total: countRes.count || 0 };
     } catch (err) {
       logger.error('로그 조회 오류', err);
       return { rows: [], total: 0 };
@@ -191,12 +187,16 @@ class LogManager {
 
   // ── 미해결 패턴 해결 표시 ──
   async markResolved(patternId) {
-    if (!this.pool) return;
-    await this.pool.query('UPDATE unresolved_patterns SET resolved = 1 WHERE id = $1', [patternId]);
+    if (!this.client) return;
+    const { error } = await this.client
+      .from('unresolved_patterns')
+      .update({ resolved: 1 })
+      .eq('id', patternId);
+    if (error) logger.error('패턴 해결 표시 오류', error);
   }
 
   close() {
-    if (this.pool) this.pool.end();
+    // Supabase JS client has no persistent connection to close
   }
 }
 
