@@ -152,6 +152,8 @@ tr:hover td{background:var(--sky);}
 .pipe-badge.high{background:rgba(16,185,129,.12);color:var(--green);}
 .pipe-badge.mid{background:rgba(245,158,11,.12);color:var(--yellow);}
 .pipe-badge.low{background:rgba(239,68,68,.12);color:var(--red);}
+.pipe-btn{display:block;margin:6px auto 0;padding:2px 8px;font-size:9px;font-weight:700;border:1.5px solid var(--primary);border-radius:5px;background:transparent;color:var(--primary);cursor:pointer;opacity:.55;transition:opacity .15s;}
+.pipe-btn:hover{opacity:1;}
 
 /* ── MODAL ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;}
@@ -426,11 +428,11 @@ tr:hover td{background:var(--sky);}
   <div class="card">
     <div class="card-title"><span class="card-icon">🔄</span>월간 폐곡선 SOP 단계</div>
     <div class="pipeline">
-      <div class="pipe-step"><div class="pipe-icon">📊</div><div class="pipe-name">로그 추출</div><div class="pipe-detail">이메일·카카오</div><div class="pipe-badge high">완료</div></div>
-      <div class="pipe-step"><div class="pipe-icon">🔍</div><div class="pipe-name">Top10 분류</div><div class="pipe-detail">4유형 자동</div><div class="pipe-badge high">완료</div></div>
-      <div class="pipe-step"><div class="pipe-icon">📝</div><div class="pipe-name">KB 갱신</div><div class="pipe-detail">4건 완료</div><div class="pipe-badge mid">진행중</div></div>
-      <div class="pipe-step"><div class="pipe-icon">🗄️</div><div class="pipe-name">ChromaDB 반영</div><div class="pipe-detail">소스 추가</div><div class="pipe-badge low">대기</div></div>
-      <div class="pipe-step"><div class="pipe-icon">✅</div><div class="pipe-name">효과 검증</div><div class="pipe-detail">감소 확인</div><div class="pipe-badge low">대기</div></div>
+      <div class="pipe-step"><div class="pipe-icon">📊</div><div class="pipe-name">로그 추출</div><div class="pipe-detail">이메일·카카오</div><div class="pipe-badge high">완료</div><button class="pipe-btn" onclick="event.stopPropagation();showPipeDetail('log')">세부내용</button></div>
+      <div class="pipe-step"><div class="pipe-icon">🔍</div><div class="pipe-name">Top10 분류</div><div class="pipe-detail">4유형 자동</div><div class="pipe-badge high">완료</div><button class="pipe-btn" onclick="event.stopPropagation();showPipeDetail('top10')">세부내용</button></div>
+      <div class="pipe-step"><div class="pipe-icon">📝</div><div class="pipe-name">KB 갱신</div><div class="pipe-detail">4건 완료</div><div class="pipe-badge mid">진행중</div><button class="pipe-btn" onclick="event.stopPropagation();showPipeDetail('kb')">세부내용</button></div>
+      <div class="pipe-step"><div class="pipe-icon">🗄️</div><div class="pipe-name">ChromaDB 반영</div><div class="pipe-detail">소스 추가</div><div class="pipe-badge low">대기</div><button class="pipe-btn" onclick="event.stopPropagation();showPipeDetail('chroma')">세부내용</button></div>
+      <div class="pipe-step"><div class="pipe-icon">✅</div><div class="pipe-name">효과 검증</div><div class="pipe-detail">감소 확인</div><div class="pipe-badge low">대기</div><button class="pipe-btn" onclick="event.stopPropagation();showPipeDetail('verify')">세부내용</button></div>
     </div>
   </div>
   <div class="card">
@@ -1159,6 +1161,93 @@ function showP4Detail(type) {
         row('Single-Loop 현황', '오류 감지 → KB 수정 반복', 'blue'),
         row('Double-Loop 목표', '응답 정책·톤 전략 자체 재설계', 'blue'),
         row('전환 예상 시점', '2026 Q2 완료 후', 'gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>`;
+  document.getElementById('statDetailModal').classList.add('open');
+}
+
+function showPipeDetail(type) {
+  const d = _p4Data || {};
+  const patterns  = d.patterns || [];
+  const doneList  = patterns.filter(p => p.resolved);
+  const todoList  = patterns.filter(p => !p.resolved);
+  const total     = patterns.length;
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const configs = {
+    log: {
+      title: '📊 로그 추출 — 세부내용',
+      desc: '매월 카카오·이메일 채널에서 전체 대화 로그를 자동 수집하는 첫 번째 단계입니다. Supabase DB에 저장된 chat_logs 테이블에서 미해결(resolved=0) 항목을 추출하여 패턴 분석 대상 목록을 구성합니다.',
+      rows: [
+        row('추출 채널', '카카오톡 · 이메일', 'blue'),
+        row('저장 위치', 'Supabase PostgreSQL — chat_logs', 'blue'),
+        row('추출 주기', '월 1회 (SOP 미팅 전)', 'green'),
+        row('이번 달 전체 로그', total+'건 패턴 추출됨', total > 0 ? 'green' : 'orange'),
+        row('미해결 항목', todoList.length+'건', todoList.length > 0 ? 'orange' : 'green'),
+        row('완료 처리 항목', doneList.length+'건', doneList.length > 0 ? 'green' : 'gray'),
+        row('단계 상태', '완료', 'green'),
+      ],
+    },
+    top10: {
+      title: '🔍 Top10 분류 — 세부내용',
+      desc: '추출된 미해결 패턴을 4가지 유형으로 자동 분류하고 빈도순으로 정렬하여 KB 갱신 우선순위 Top10을 도출하는 단계입니다. 유형별 분류로 담당자가 각 패턴에 맞는 처리 방법을 즉시 파악할 수 있습니다.',
+      rows: [
+        row('분류 유형 1', 'KB 부재 — KB에 답변 없음', 'orange'),
+        row('분류 유형 2', '오매칭 — 잘못된 FAQ 연결', 'orange'),
+        row('분류 유형 3', '에스컬 — 담당자 연결 필요', 'yellow'),
+        row('분류 유형 4', '컴플 — 화장품법 관련 주의', 'yellow'),
+        row('현재 패턴 수', total+'건', total > 0 ? 'blue' : 'gray'),
+        row('Top10 대상', Math.min(total, 10)+'건', 'blue'),
+        row('분류 방법', '자동 (키워드 + 유사도 기반)', 'green'),
+        row('단계 상태', '완료', 'green'),
+      ],
+    },
+    kb: {
+      title: '📝 KB 갱신 — 세부내용',
+      desc: 'Top10 패턴을 바탕으로 FAQ 항목을 추가하거나 기존 답변을 수정하는 핵심 단계입니다. 갱신된 항목은 resolved 처리되어 다음 달 Top10에서 제외됩니다. 담당자가 직접 faq-kb.json을 편집하거나 KB 갱신 현황 메뉴에서 처리합니다.',
+      rows: [
+        row('갱신 완료', doneList.length+'건', doneList.length > 0 ? 'green' : 'gray'),
+        row('갱신 예정', todoList.length+'건', todoList.length > 0 ? 'orange' : 'green'),
+        row('갱신 방법', 'faq-kb.json 직접 수정', 'blue'),
+        row('갱신 후 처리', '대시보드 → 갱신 버튼 클릭', 'blue'),
+        row('단계 상태', doneList.length > 0 && todoList.length > 0 ? '진행중' : doneList.length > 0 ? '완료' : '대기', doneList.length > 0 && todoList.length > 0 ? 'yellow' : doneList.length > 0 ? 'green' : 'orange'),
+      ],
+    },
+    chroma: {
+      title: '🗄️ ChromaDB 반영 — 세부내용',
+      desc: 'KB 갱신 완료 후 TF-IDF 인메모리 인덱스를 재구축하는 단계입니다. 현재 배포 환경(Render)에서는 서버 재시작 시 자동으로 faq-kb.json을 읽어 인덱스를 갱신합니다. ChromaDB가 온라인인 경우 벡터 DB에도 동시 반영됩니다.',
+      rows: [
+        row('인덱스 방식', 'TF-IDF 인메모리 (자동)', 'green'),
+        row('재구축 시점', '서버 시작 시 자동 실행', 'blue'),
+        row('현재 인덱스 문서 수', '55건 (FAQ 50 + 정책 5)', 'blue'),
+        row('불용어 필터', '한국어 25개 적용', 'green'),
+        row('ChromaDB 상태', 'Render 환경 — 오프라인 폴백 사용', 'yellow'),
+        row('반영 소요 시간', '서버 재시작 후 약 2초', 'green'),
+        row('단계 상태', todoList.length === 0 ? '완료' : '대기', todoList.length === 0 ? 'green' : 'orange'),
+      ],
+    },
+    verify: {
+      title: '✅ 효과 검증 — 세부내용',
+      desc: 'KB 갱신 후 동일 패턴의 미해결 건수가 실제로 감소했는지 확인하는 마지막 단계입니다. 다음 SOP 미팅에서 전월 대비 지표를 비교하여 갱신 효과를 수치로 검증합니다. 효과 미흡 시 해당 항목을 다시 Top10에 포함합니다.',
+      rows: [
+        row('검증 시점', '다음 SOP 미팅 (6월 3일)', 'blue'),
+        row('검증 지표 1', '동일 패턴 미해결 건수 감소', 'blue'),
+        row('검증 지표 2', 'NPS 점수 변화', 'blue'),
+        row('검증 지표 3', '해결률 변화', 'blue'),
+        row('효과 미흡 시', '해당 패턴 재분류 → 차월 Top10 포함', 'orange'),
+        row('갱신 완료 항목', doneList.length+'건 검증 예정', doneList.length > 0 ? 'green' : 'gray'),
+        row('단계 상태', doneList.length > 0 && todoList.length === 0 ? '대기(갱신완료 후)' : '대기', 'orange'),
       ],
     },
   };
