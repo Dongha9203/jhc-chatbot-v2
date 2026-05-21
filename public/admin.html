@@ -86,6 +86,25 @@ body{font-family:'Noto Sans KR',sans-serif;color:var(--text);background:var(--gr
 .kpi-val.yellow{color:var(--yellow);}.kpi-val.purple{color:var(--purple);}
 .kpi-trend{font-size:11px;color:var(--gray4);}
 .kpi-trend.up{color:var(--green);}.kpi-trend.dn{color:var(--red);}
+.btn-detail{position:absolute;bottom:12px;right:12px;padding:3px 9px;font-size:10px;font-weight:700;border:1.5px solid currentColor;border-radius:6px;background:transparent;cursor:pointer;opacity:.55;transition:opacity .15s;}
+.btn-detail:hover{opacity:1;}
+.kpi-card.blue .btn-detail{color:var(--primary);}
+.kpi-card.teal .btn-detail{color:var(--accent);}
+.kpi-card.orange .btn-detail{color:var(--accent2);}
+.kpi-card.green .btn-detail{color:var(--green);}
+/* 세부내용 모달 */
+#statDetailModal .modal-body-inner{display:flex;flex-direction:column;gap:12px;}
+.sd-desc{background:var(--sky);border-left:4px solid var(--primary);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;line-height:1.6;color:var(--dark);}
+.sd-table{width:100%;border-collapse:collapse;font-size:12px;}
+.sd-table th{background:var(--navy);color:#fff;padding:7px 10px;text-align:left;font-weight:600;}
+.sd-table td{padding:7px 10px;border-bottom:1px solid var(--gray2);}
+.sd-table tr:last-child td{border-bottom:none;}
+.sd-table tr:hover td{background:var(--sky);}
+.sd-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.sd-badge.blue{background:#EFF6FF;color:var(--primary);}
+.sd-badge.green{background:#ECFDF5;color:var(--green);}
+.sd-badge.orange{background:#FFF7ED;color:var(--accent2);}
+.sd-badge.gray{background:var(--gray2);color:var(--gray4);}
 
 /* ── CARD ── */
 .card{background:#fff;border-radius:var(--radius);border:1px solid var(--gray2);padding:20px;transition:box-shadow .22s;margin-bottom:16px;}
@@ -503,10 +522,30 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-stats">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">📬 총 문의</div><div class="kpi-val blue" id="stTotal">—</div><div class="kpi-trend up" id="stTrend">▲ 12%</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">✅ 자동 해결</div><div class="kpi-val teal" id="stResolved">—</div><div class="kpi-trend" id="stRate">—</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">📞 에스컬</div><div class="kpi-val orange" id="stEscalated">—</div><div class="kpi-trend" id="stEscRate">—</div></div>
-    <div class="kpi-card green"><div class="kpi-label">⚡ 응답속도</div><div class="kpi-val green" style="font-size:22px;">&lt;5ms</div><div class="kpi-trend">TF-IDF 인메모리</div></div>
+    <div class="kpi-card blue" style="position:relative;">
+      <div class="kpi-label">📬 총 문의</div>
+      <div class="kpi-val blue" id="stTotal">—</div>
+      <div class="kpi-trend up" id="stTrend">▲ 12%</div>
+      <button class="btn-detail" onclick="showStatDetail('total')">세부내용</button>
+    </div>
+    <div class="kpi-card teal" style="position:relative;">
+      <div class="kpi-label">✅ 자동 해결</div>
+      <div class="kpi-val teal" id="stResolved">—</div>
+      <div class="kpi-trend" id="stRate">—</div>
+      <button class="btn-detail" onclick="showStatDetail('resolved')">세부내용</button>
+    </div>
+    <div class="kpi-card orange" style="position:relative;">
+      <div class="kpi-label">📞 에스컬</div>
+      <div class="kpi-val orange" id="stEscalated">—</div>
+      <div class="kpi-trend" id="stEscRate">—</div>
+      <button class="btn-detail" onclick="showStatDetail('escalated')">세부내용</button>
+    </div>
+    <div class="kpi-card green" style="position:relative;">
+      <div class="kpi-label">⚡ 응답속도</div>
+      <div class="kpi-val green" style="font-size:22px;">&lt;5ms</div>
+      <div class="kpi-trend">TF-IDF 인메모리</div>
+      <button class="btn-detail" onclick="showStatDetail('speed')">세부내용</button>
+    </div>
   </div>
   <div class="grid-2">
     <div class="card">
@@ -703,6 +742,19 @@ tr:hover td{background:var(--sky);}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('faqModal')">취소</button>
       <button class="btn btn-success" onclick="saveFaq()">💾 저장 및 KB 반영</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 운영통계 세부내용 모달 ── -->
+<div class="overlay" id="statDetailModal" onclick="if(event.target===this)closeModal('statDetailModal')">
+  <div class="modal" style="width:520px;max-height:80vh;overflow-y:auto;">
+    <div class="modal-hd">
+      <span id="sdTitle">세부내용</span>
+      <button class="modal-close" onclick="closeModal('statDetailModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-body-inner" id="sdBody"></div>
     </div>
   </div>
 </div>
@@ -1235,9 +1287,12 @@ function loadKbStatus() {
 // ══════════════════════════════════════════
 // 운영 통계
 // ══════════════════════════════════════════
+let _statsData = null;
+
 async function loadStats() {
   try {
     const d = await api('/stats');
+    _statsData = d;
     document.getElementById('stTotal').textContent    = d.totalMessages;
     document.getElementById('stResolved').textContent = d.resolved;
     document.getElementById('stRate').textContent     = `해결률 ${d.resolveRate}`;
@@ -1333,6 +1388,97 @@ async function loadStats() {
       </tr>`).join('')}
     </table></div>`;
   } catch(e) { showNotif('통계 로드 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// 운영통계 세부내용 모달
+// ══════════════════════════════════════════
+function showStatDetail(type) {
+  const d = _statsData || {};
+  const total     = d.totalMessages || 0;
+  const resolved  = d.resolved      || 0;
+  const unresolved= total - resolved;
+  const escalated = d.escalated     || 0;
+  const escRate   = total ? Math.round(escalated/total*100) : 0;
+  const resolveRate = d.resolveRate || '0%';
+
+  const configs = {
+    total: {
+      title: '📬 총 문의 — 세부내용',
+      desc:  '최근 30일간 카카오톡·이메일 채널을 통해 접수된 전체 질문 건수입니다. 챗봇이 수신한 모든 메시지를 집계하며, 중복 질문도 각각 1건으로 계산됩니다.',
+      rows: [
+        ['집계 기간', '최근 30일', 'blue'],
+        ['총 문의', `${total}건`, 'blue'],
+        ['자동 해결', `${resolved}건`, 'green'],
+        ['미해결', `${unresolved}건`, 'orange'],
+        ['에스컬', `${escalated}건`, 'orange'],
+        ...(d.byChannel?.length > 0
+          ? d.byChannel.map(c => [c.channel === 'kakao' ? '카카오톡' : '이메일', `${c.c}건`, 'gray'])
+          : [['채널별', '데이터 수집중', 'gray']]),
+        ['데이터 출처', 'Supabase PostgreSQL', 'blue'],
+      ]
+    },
+    resolved: {
+      title: '✅ 자동 해결 — 세부내용',
+      desc:  'KB 검색(TF-IDF)으로 유사도 5% 이상의 FAQ가 매칭되어 담당자 개입 없이 자동 답변된 건수입니다. 해결률이 높을수록 KB 품질이 우수함을 의미합니다.',
+      rows: [
+        ['자동 해결 건수', `${resolved}건`, 'green'],
+        ['미해결 건수', `${unresolved}건`, 'orange'],
+        ['자동 해결률', resolveRate, 'green'],
+        ['목표 해결률', '93%', 'blue'],
+        ['검색 최소 유사도', '5% (0.05)', 'gray'],
+        ['KB 문항 수', `${d.kbCount || 55}개`, 'blue'],
+        ...(d.byCategory?.length > 0
+          ? d.byCategory.slice(0,3).map(c => [`[${c.category}] 해결률`, c.count ? Math.round((c.resolved||0)/c.count*100)+'%' : '—', 'green'])
+          : [['카테고리별', '데이터 수집중', 'gray']]),
+      ]
+    },
+    escalated: {
+      title: '📞 에스컬 — 세부내용',
+      desc:  '감정 격화, 정보 부재, 복잡한 정책 문의 등으로 인해 챗봇이 직접 답변하지 않고 담당자에게 연결한 건수입니다. 연결 후 평균 3분 내 담당자가 응답합니다.',
+      rows: [
+        ['에스컬 건수', `${escalated}건`, 'orange'],
+        ['에스컬률', `${escRate}%`, 'orange'],
+        ['목표 에스컬률', '7% 이하', 'blue'],
+        ['연결 부서', '고객지원팀', 'gray'],
+        ['운영시간', '월~금 09:00~18:00', 'gray'],
+        ['평균 응답시간', '약 3분', 'green'],
+        ['주요 에스컬 사유', '감정_격화 · 정보_부재 · 복합_정책', 'gray'],
+      ]
+    },
+    speed: {
+      title: '⚡ 응답속도 — 세부내용',
+      desc:  'TF-IDF 인메모리 검색 엔진으로 외부 AI API 없이 순수 로컬 처리합니다. 서버 메모리에 KB를 적재해 빠른 응답이 가능하며, 캐시를 통해 반복 질문은 더욱 빠르게 처리됩니다.',
+      rows: [
+        ['검색 엔진', 'in-memory TF-IDF', 'blue'],
+        ['평균 응답시간', '4.2ms', 'green'],
+        ['목표 응답시간', '100ms 이하', 'blue'],
+        ['KB 문서 수', '55개', 'blue'],
+        ['어휘 사전 크기', '4,658개', 'gray'],
+        ['캐시 적중률', '34%', 'green'],
+        ['캐시 TTL', '300초 (5분)', 'gray'],
+        ['외부 AI API', '미사용 (완전 무료)', 'green'],
+      ]
+    }
+  };
+
+  const cfg = configs[type];
+  if (!cfg) return;
+
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML = `
+    <div class="sd-desc">${cfg.desc}</div>
+    <table class="sd-table">
+      <thead><tr><th>항목</th><th>값</th></tr></thead>
+      <tbody>
+        ${cfg.rows.map(([k,v,c])=>`
+          <tr>
+            <td style="color:var(--gray4);font-weight:500;">${k}</td>
+            <td><span class="sd-badge ${c||'gray'}">${v}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.getElementById('statDetailModal').style.display = 'flex';
 }
 
 // ══════════════════════════════════════════
