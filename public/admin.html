@@ -92,6 +92,7 @@ body{font-family:'Noto Sans KR',sans-serif;color:var(--text);background:var(--gr
 .kpi-card.teal .btn-detail{color:var(--accent);}
 .kpi-card.orange .btn-detail{color:var(--accent2);}
 .kpi-card.green .btn-detail{color:var(--green);}
+.kpi-card.yellow .btn-detail{color:var(--yellow);}
 /* 세부내용 모달 */
 #statDetailModal .modal-body-inner{display:flex;flex-direction:column;gap:12px;}
 .sd-desc{background:var(--sky);border-left:4px solid var(--primary);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;line-height:1.6;color:var(--dark);}
@@ -568,10 +569,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-evaluation">
   <div class="kpi-grid">
-    <div class="kpi-card orange"><div class="kpi-label">⭐ NPS 점수</div><div class="kpi-val orange" id="evalNps">—</div><div class="kpi-trend">목표 Q2 48점</div></div>
-    <div class="kpi-card green"><div class="kpi-label">😊 긍정 평가</div><div class="kpi-val green" id="evalPos">—</div><div class="kpi-trend"></div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">😐 중립 평가</div><div class="kpi-val yellow" id="evalNeu">—</div><div class="kpi-trend"></div></div>
-    <div class="kpi-card blue"><div class="kpi-label">😞 부정 평가</div><div class="kpi-val blue" id="evalNeg">—</div><div class="kpi-trend">개선 필요</div></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">⭐ NPS 점수</div><div class="kpi-val orange" id="evalNps">—</div><div class="kpi-trend">목표 Q2 48점</div><button class="btn-detail" onclick="showEvalDetail('nps')">세부내용</button></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">😊 긍정 평가</div><div class="kpi-val green" id="evalPos">—</div><div class="kpi-trend" id="evalPosTrend"></div><button class="btn-detail" onclick="showEvalDetail('positive')">세부내용</button></div>
+    <div class="kpi-card yellow" style="position:relative;"><div class="kpi-label">😐 중립 평가</div><div class="kpi-val yellow" id="evalNeu">—</div><div class="kpi-trend" id="evalNeuTrend"></div><button class="btn-detail" onclick="showEvalDetail('neutral')">세부내용</button></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">😞 부정 평가</div><div class="kpi-val blue" id="evalNeg">—</div><div class="kpi-trend">개선 필요</div><button class="btn-detail" onclick="showEvalDetail('negative')">세부내용</button></div>
   </div>
   <div class="grid-7-3">
     <div class="card">
@@ -1486,9 +1487,11 @@ function showStatDetail(type) {
 // ══════════════════════════════════════════
 // 평가 결과
 // ══════════════════════════════════════════
+let _evalData = null;
 async function loadEvaluation() {
   try {
     const d = await api('/evaluation');
+    _evalData = d;
     document.getElementById('evalNps').textContent = d.summary.nps;
     document.getElementById('evalPos').textContent = d.summary.positive + '%';
     document.getElementById('evalNeu').textContent = d.summary.neutral + '%';
@@ -1520,6 +1523,92 @@ async function loadEvaluation() {
         </div>`).join('');
     }
   } catch(e) { showNotif('평가 로드 실패','error'); }
+}
+
+function showEvalDetail(type) {
+  const d = _evalData || {};
+  const s = d.summary || {};
+  const total = d.total || 0;
+  const nps   = s.nps   || 0;
+  const posPct= s.positive || 0;
+  const neuPct= s.neutral  || 0;
+  const negPct= s.negative || 0;
+  const posCnt= Math.round(total * posPct / 100);
+  const neuCnt= Math.round(total * neuPct / 100);
+  const negCnt= Math.round(total * negPct / 100);
+  const cr = d.criteria || {};
+
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const configs = {
+    nps: {
+      title: '⭐ NPS 점수 — 세부내용',
+      desc: 'NPS(Net Promoter Score)는 고객 추천 의향을 -100~100 점으로 측정합니다. 5점 만점 평가에서 4~5점(긍정)을 추천자, 3점(중립)을 중립자, 1~2점(부정)을 비추천자로 분류합니다. NPS = 추천자% − 비추천자%',
+      rows: [
+        row('현재 NPS',      nps + '점',              nps >= 50 ? 'green' : nps >= 0 ? 'blue' : 'orange'),
+        row('목표 NPS',      '48점 (2026 Q2)',         'gray'),
+        row('총 평가 건수',  total + '건',             'blue'),
+        row('추천자 (4~5점)', posCnt + '건 (' + posPct + '%)', 'green'),
+        row('중립자 (3점)',   neuCnt + '건 (' + neuPct + '%)', 'blue'),
+        row('비추천자 (1~2점)', negCnt + '건 (' + negPct + '%)', 'orange'),
+        row('응답 정확도',   (cr.accuracy  || '—') + '/5.0', 'gray'),
+        row('문제 해결도',   (cr.resolution|| '—') + '/5.0', 'gray'),
+      ]
+    },
+    positive: {
+      title: '😊 긍정 평가 — 세부내용',
+      desc: '4~5점 평가를 준 고객 비율입니다. KB 검색이 정확히 매칭되어 담당자 연결 없이 해결된 경우가 대부분입니다. 긍정 평가가 높을수록 KB 품질과 응답 톤이 우수함을 나타냅니다.',
+      rows: [
+        row('긍정 평가 건수', posCnt + '건',           'green'),
+        row('긍정 비율',      posPct + '%',            'green'),
+        row('총 평가 건수',   total + '건',            'blue'),
+        row('5점 (최고)',     '매우 만족',             'green'),
+        row('4점 (좋음)',     '만족',                  'green'),
+        row('응답 정확도',    (cr.accuracy  || '—') + '/5.0', 'gray'),
+        row('톤 자연스러움',  (cr.naturalness || '—') + '/5.0', 'gray'),
+        row('목표 긍정률',    '93% 이상',              'gray'),
+      ]
+    },
+    neutral: {
+      title: '😐 중립 평가 — 세부내용',
+      desc: '3점 평가를 준 고객 비율입니다. 답변이 제공되었으나 고객 기대치에 완전히 부합하지 못한 경우입니다. KB 갱신과 응답 톤 개선으로 긍정 평가로 전환 가능합니다.',
+      rows: [
+        row('중립 평가 건수', neuCnt + '건',           'blue'),
+        row('중립 비율',      neuPct + '%',            'blue'),
+        row('총 평가 건수',   total + '건',            'blue'),
+        row('3점 (보통)',     '기대치 미달',           'blue'),
+        row('긍정 전환 가능', neuCnt + '건',           'green'),
+        row('톤 자연스러움',  (cr.naturalness || '—') + '/5.0', 'gray'),
+        row('문제 해결도',    (cr.resolution  || '—') + '/5.0', 'gray'),
+        row('개선 우선순위',  'KB 미해결 패턴 보완',  'gray'),
+      ]
+    },
+    negative: {
+      title: '😞 부정 평가 — 세부내용',
+      desc: '1~2점 평가를 준 고객 비율입니다. KB에 없는 질문, 감정 격화 미감지, 또는 에스컬 지연이 주요 원인입니다. 즉각적인 KB 갱신과 에스컬 프로세스 점검이 필요합니다.',
+      rows: [
+        row('부정 평가 건수', negCnt + '건',           'orange'),
+        row('부정 비율',      negPct + '%',            'orange'),
+        row('총 평가 건수',   total + '건',            'blue'),
+        row('2점 (불만)',     '답변 부족',             'orange'),
+        row('1점 (매우 불만)', '즉시 개선 필요',       'orange'),
+        row('에스컬 만족도',  (cr.escalate || '—') + '/5.0', 'gray'),
+        row('목표 부정률',    '3% 이하',              'gray'),
+        row('개선 조치',      'KB 갱신 + 톤 튜닝',    'gray'),
+      ]
+    }
+  };
+
+  const cfg = configs[type];
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 function openEvalModal() { document.getElementById('evalModal').classList.add('open'); }
