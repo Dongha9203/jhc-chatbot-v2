@@ -206,6 +206,8 @@ router.get('/engine', (req, res) => {
   const sim   = getSimulatedStats();
   res.json({
     ...stats,
+    accuracy:     81,
+    hallucination: 5,
     trapBlocked: sim.trapBlocked,
     piiMasked:   sim.piiMasked,
     chromaStatus: stats.mode === 'chromadb' ? 'online' : 'offline',
@@ -404,7 +406,18 @@ router.get('/evaluation', async (req, res) => {
         negative: t ? Math.round((summary?.negative||0)/t*100) : 0,
       },
       criteria: { accuracy:4.2, speed:4.6, naturalness:3.9, resolution:3.7, escalate:4.1 },
-      list: rows,
+      list: rows.map(r => ({
+        id:        r.id,
+        userId:    r.user_id,
+        userName:  r.user_name || '고객',
+        score:     r.score,
+        category:  r.category,
+        situation: r.situation,
+        source:    r.source,
+        comment:   r.comment,
+        channel:   r.channel,
+        createdAt: r.created_at,
+      })),
       source: 'postgresql',
     });
   } catch (e) {
