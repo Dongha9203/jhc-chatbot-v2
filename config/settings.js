@@ -54,7 +54,7 @@ const settings = {
   },
 
   search: {
-    minScore:      parseFloat(process.env.SEARCH_MIN_SCORE)   || 0.05,
+    minScore:      parseFloat(process.env.SEARCH_MIN_SCORE)   || 0.25,
     topK:          parseInt(process.env.SEARCH_TOP_K)         || 3,
     exactBonus:    parseFloat(process.env.TFIDF_EXACT_BONUS)  || 2.0,
     keywordBonus:  parseFloat(process.env.TFIDF_KEYWORD_BONUS)|| 1.5,

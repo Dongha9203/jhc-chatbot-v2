@@ -16,7 +16,7 @@ services:
       - key: SEARCH_MODE
         value: memory
       - key: SEARCH_MIN_SCORE
-        value: "0.05"
+        value: "0.25"
       - key: SEARCH_TOP_K
         value: "3"
       - key: SEARCH_KEYWORD_BONUS
