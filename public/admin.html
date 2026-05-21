@@ -1911,13 +1911,14 @@ async function loadTop10() {
   try {
     const d = await api('/top10');
     _top10Data = d;
-    const patterns = d.patterns || [];
-    document.getElementById('t10Total').textContent = patterns.length;
-    const done    = patterns.filter(p => p.resolved).length;
-    const urgList = patterns.filter(p => !p.resolved && isUrgent(p.pattern));
+    const patterns   = d.patterns || [];
+    const done       = patterns.filter(p =>  p.resolved).length;
+    const unresolved = patterns.filter(p => !p.resolved).length;
+    const urgList    = patterns.filter(p => !p.resolved && isUrgent(p.pattern));
+    document.getElementById('t10Total').textContent   = unresolved;
     document.getElementById('t10Done').textContent    = done;
-    document.getElementById('t10Todo').textContent    = patterns.length - done;
-    document.getElementById('sbTop10').textContent    = patterns.length - done;
+    document.getElementById('t10Todo').textContent    = unresolved - urgList.length;
+    document.getElementById('sbTop10').textContent    = unresolved;
     document.getElementById('t10Urgent').textContent  = urgList.length + '건';
     document.getElementById('t10UrgentTrend').textContent = urgList.length > 0 ? '정책·규정 관련' : '해당 없음';
     renderTop10Table(patterns, 'top10Table');
