@@ -1528,7 +1528,7 @@ async function loadEvaluation() {
 function showEvalDetail(type) {
   const d = _evalData || {};
   const s = d.summary || {};
-  const total = d.total || 0;
+  const total = s.total || 0;
   const nps   = s.nps   || 0;
   const posPct= s.positive || 0;
   const neuPct= s.neutral  || 0;
