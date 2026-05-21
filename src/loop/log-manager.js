@@ -110,6 +110,7 @@ class LogManager {
         resolveRate:     s.total ? ((s.resolved / s.total) * 100).toFixed(1) + '%' : '0%',
         byChannel:       s.byChannel    || [],
         bySituation:     s.bySituation  || [],
+        byCategory:      s.byCategory   || [],
         byHour:          s.byHour       || [],
         monthly:         s.monthly      || [],
         top10Unresolved: top10,
