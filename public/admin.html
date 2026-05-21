@@ -1313,7 +1313,8 @@ async function loadStats() {
         const y=T+cH-p/100*cH;
         const v=Math.round(max*p/100);
         return `<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#E2E8F0" stroke-width="${p===0?1.5:1}"/>
-          <text x="${L-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#94A3B8">${v}</text>`;
+          <text x="${L-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#94A3B8">${v}</text>
+          ${p===0?`<text x="${L-5}" y="${y+14}" text-anchor="end" font-size="8" fill="#94A3B8">(건수)</text>`:''}`;
       }).join('');
       const bars=d.byChannel.map((c,i)=>{
         const bh=Math.max(c.c/max*cH,2);
@@ -1328,8 +1329,8 @@ async function loadStats() {
       }).join('');
       cc.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;">
         <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#F5F7FA"/>
-        <text x="${W/2}" y="16" text-anchor="middle" font-size="9" fill="#94A3B8">채널별 문의 건수 (최근 30일 합계 ${total}건)</text>
-        ${yLabels}${bars}</svg>`;
+        ${yLabels}${bars}
+        <text x="${W/2}" y="${H-8}" text-anchor="middle" font-size="9" fill="#94A3B8">채널별 문의 건수 (최근 30일 합계 ${total}건)</text></svg>`;
     } else if (cc) {
       cc.innerHTML='<div style="text-align:center;color:#94A3B8;padding:40px 0;font-size:13px;">데이터 없음</div>';
     }
@@ -1347,7 +1348,8 @@ async function loadStats() {
           const y=T+cH-p/100*cH;
           const v=Math.round(max2*p/100);
           return `<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#E2E8F0" stroke-width="${p===0?1.5:1}"/>
-            <text x="${L-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#94A3B8">${v}</text>`;
+            <text x="${L-5}" y="${y+4}" text-anchor="end" font-size="9" fill="#94A3B8">${v}</text>
+            ${p===0?`<text x="${L-5}" y="${y+14}" text-anchor="end" font-size="8" fill="#94A3B8">(건수)</text>`:''}`;
         }).join('');
         const bars=d.byHour.map((h,i)=>{
           const bh=Math.max(h.count/max2*cH,1);
@@ -1358,7 +1360,7 @@ async function loadStats() {
           const isBiz=hr>=9&&hr<18;
           const col=isPeak?'#FF6B35':isBiz?'#1B5FA8':'#94A3B8';
           const cnt=h.count>0?`<text x="${x+bw/2}" y="${y-3}" text-anchor="middle" font-size="8" fill="${col}" font-weight="700">${h.count}</text>`:'';
-          const showLbl=hr%3===0||isPeak;
+          const showLbl=i===0||hr%3===0||isPeak;
           const lbl=showLbl?`<text x="${x+bw/2}" y="${T+cH+15}" text-anchor="middle" font-size="${isPeak?10:9}" fill="${isPeak?'#FF6B35':'#64748B'}" font-weight="${isPeak?'700':'400'}">${String(hr).padStart(2,'0')}시</text>`:'';
           return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="2" fill="${col}" opacity="0.9"/>
             ${cnt}${lbl}`;
