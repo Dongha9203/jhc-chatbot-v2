@@ -1707,7 +1707,7 @@ async function checkChroma() {
 // ══════════════════════════════════════════
 // 유틸
 // ══════════════════════════════════════════
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModal(id) { const el = document.getElementById(id); el.classList.remove('open'); el.style.display = ''; }
 
 function showNotif(msg, type='info') {
   const n = document.getElementById('notif');
