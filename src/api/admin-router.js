@@ -128,7 +128,7 @@ async function safeGetStats() {
 
 async function safeGetTop10(days) {
   try {
-    const rows = await logManager.getUnresolvedTop10(days);
+    const rows = await logManager.getAllPatterns(days);
     if (rows.length > 0) return rows;
   } catch (e) {
     logger.warn('Top10 조회 오류 — 시뮬레이션 반환', e.message);
@@ -227,10 +227,14 @@ router.get('/top10', async (req, res) => {
 });
 
 router.patch('/top10/:id', async (req, res) => {
+  const numId = parseInt(req.params.id);
+  // SIM 폴백 배열도 즉시 갱신 (DB 미연결 환경 대응)
+  const simItem = SIM_TOP10.find(p => p.id === numId);
+  if (simItem) simItem.resolved = 1;
   try {
     await logManager.markResolved(req.params.id);
   } catch (e) { /* DB 미연결 시 무시 */ }
-  res.json({ result: 'ok', id: req.params.id });
+  res.json({ result: 'ok', id: numId });
 });
 
 // ═══════════════════════════════════════════

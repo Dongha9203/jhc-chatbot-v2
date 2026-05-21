@@ -69,22 +69,41 @@ class LogManager {
     if (error) logger.error('미해결 패턴 집계 오류', error);
   }
 
-  // ── 미해결 Top10 조회 ──
+  // ── 미해결 Top10 조회 (resolved=0 만) ──
   async getUnresolvedTop10(days = 30) {
     if (!this.client) return [];
     try {
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
       const { data, error } = await this.client
         .from('unresolved_patterns')
-        .select('pattern, count, first_seen, last_seen')
+        .select('id, pattern, count, first_seen, last_seen')
         .eq('resolved', 0)
         .gte('last_seen', since)
         .order('count', { ascending: false })
         .limit(10);
       if (error) throw error;
-      return data || [];
+      return (data || []).map(r => ({ ...r, resolved: 0 }));
     } catch (err) {
       logger.error('Top10 조회 오류', err);
+      return [];
+    }
+  }
+
+  // ── 전체 패턴 조회 (resolved 포함) ──
+  async getAllPatterns(days = 30) {
+    if (!this.client) return [];
+    try {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await this.client
+        .from('unresolved_patterns')
+        .select('id, pattern, count, first_seen, last_seen, resolved')
+        .gte('last_seen', since)
+        .order('count', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      logger.error('전체 패턴 조회 오류', err);
       return [];
     }
   }

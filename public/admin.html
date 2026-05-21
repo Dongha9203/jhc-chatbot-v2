@@ -2010,10 +2010,16 @@ function showTop10Detail(type) {
 function renderTop10Table(patterns, targetId) {
   const el = document.getElementById(targetId);
   if (!el || !patterns) return;
-  const max = patterns[0]?.count || 1;
+  // 미해결 항목만 표시 (갱신 완료 항목은 테이블에서 제거)
+  const unresolved = patterns.filter(p => !p.resolved);
+  const max = unresolved[0]?.count || 1;
+  if (unresolved.length === 0) {
+    el.innerHTML = `<div style="padding:32px;text-align:center;color:var(--green);font-size:13px;font-weight:700;">🎉 모든 패턴이 갱신 완료되었습니다!</div>`;
+    return;
+  }
   el.innerHTML = `<div class="tbl-wrap"><table>
     <tr><th>#</th><th>패턴</th><th>발생 빈도</th><th>FAQ</th><th>상태</th><th>액션</th></tr>
-    ${patterns.map((r,i)=>`<tr>
+    ${unresolved.map((r,i)=>`<tr>
       <td><strong style="font-family:Montserrat;font-size:15px;color:${i<3?'var(--accent2)':'var(--gray3)'};">${i+1}</strong></td>
       <td style="font-weight:600;font-size:12px;">${r.pattern}</td>
       <td><div style="display:flex;align-items:center;gap:7px;">
@@ -2023,8 +2029,8 @@ function renderTop10Table(patterns, targetId) {
         <strong style="color:var(--primary);font-size:13px;">${r.count}건</strong>
       </div></td>
       <td style="font-size:11px;color:var(--gray4);">${r.faq||'—'}</td>
-      <td>${r.resolved?'<span class="badge ok">✅ 완료</span>':'<span class="badge warn">⬜ 예정</span>'}</td>
-      <td>${r.resolved?'—':`<button class="btn btn-primary btn-sm" onclick="resolveTop(${r.id||i+1})">갱신</button>`}</td>
+      <td><span class="badge warn">⬜ 예정</span></td>
+      <td><button class="btn btn-primary btn-sm" onclick="resolveTop(${r.id||i+1})">갱신</button></td>
     </tr>`).join('')}
   </table></div>`;
 }
