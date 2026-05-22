@@ -585,8 +585,8 @@ tr:hover td{background:var(--sky);}
     <div class="card">
       <div class="card-title"><span class="card-icon">📊</span>평가 기준별 점수</div>
       <div id="evalCriteria"></div>
-      <div style="margin-top:14px;padding:10px;background:var(--sky);border-radius:8px;font-size:11px;">
-        💡 <strong>개선 권고</strong><br>문제 해결도·톤 자연스러움 보강 필요<br>→ P3 톤 갱신 + KB 미해결 6건 완료 시 +0.5점 예상
+      <div id="evalAdvice" style="margin-top:14px;padding:10px;background:var(--sky);border-radius:8px;font-size:11px;">
+        💡 <strong>개선 권고</strong><br>데이터 로딩 중…
       </div>
     </div>
   </div>
@@ -1914,24 +1914,33 @@ async function loadEvaluation() {
   try {
     const d = await api('/evaluation');
     _evalData = d;
-    document.getElementById('evalNps').textContent = d.summary.nps;
-    document.getElementById('evalPos').textContent = d.summary.positive + '%';
-    document.getElementById('evalNeu').textContent = d.summary.neutral + '%';
-    document.getElementById('evalNeg').textContent = d.summary.negative + '%';
+    const s = d.summary || {};
+    const evalTotal = s.total || 0;
+    document.getElementById('evalNps').textContent = s.nps ?? '—';
+    document.getElementById('evalPos').textContent = (s.positive ?? '—') + (s.positive != null ? '%' : '');
+    document.getElementById('evalNeu').textContent = (s.neutral  ?? '—') + (s.neutral  != null ? '%' : '');
+    document.getElementById('evalNeg').textContent = (s.negative ?? '—') + (s.negative != null ? '%' : '');
+    // 트렌드에 건수 표시
+    const posCnt = evalTotal ? Math.round(evalTotal * (s.positive||0) / 100) : 0;
+    const neuCnt = evalTotal ? Math.round(evalTotal * (s.neutral ||0) / 100) : 0;
+    const posTrendEl = document.getElementById('evalPosTrend');
+    const neuTrendEl = document.getElementById('evalNeuTrend');
+    if (posTrendEl) posTrendEl.textContent = evalTotal ? `총 ${posCnt}건` : '—';
+    if (neuTrendEl) neuTrendEl.textContent = evalTotal ? `총 ${neuCnt}건` : '—';
     const el = document.getElementById('evalList');
     if (el) el.innerHTML = d.list.map(e=>`
       <div class="eval-card">
-        <div class="eval-avatar">${e.userName.charAt(0)}</div>
+        <div class="eval-avatar">${(e.userName||'?').charAt(0)}</div>
         <div style="flex:1;">
           <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
-            <span class="eval-name">${e.userName}</span>
+            <span class="eval-name">${e.userName||'고객'}</span>
             <span class="stars">${'★'.repeat(e.score)}${'☆'.repeat(5-e.score)}</span>
             <span style="font-size:10px;color:var(--gray4);">${timeAgo(e.createdAt)}</span>
-            <span class="badge info" style="font-size:10px;">${e.category}</span>
-            <span class="badge ${e.channel==='kakao'?'ok':'info'}" style="font-size:10px;">${e.channel}</span>
+            ${e.category ? `<span class="badge info" style="font-size:10px;">${e.category}</span>` : ''}
+            <span class="badge ${e.channel==='kakao'?'ok':'info'}" style="font-size:10px;">${e.channel||'—'}</span>
           </div>
           <div class="eval-text">${e.comment||'(코멘트 없음)'}</div>
-          <div class="eval-src">📎 ${e.source||''}</div>
+          <div class="eval-src">📎 ${e.source||'자동 집계'}</div>
         </div>
       </div>`).join('');
     const cr = document.getElementById('evalCriteria');
@@ -1942,7 +1951,18 @@ async function loadEvaluation() {
         <div class="prog-wrap">
           <div class="prog-label"><span>${labels[k]||k}</span><span style="font-weight:700;color:${colors[k]}">${v}/5.0</span></div>
           <div class="prog-bar"><div class="prog-fill" style="width:${v/5*100}%;background:${colors[k]}"></div></div>
-        </div>`).join('');
+        </div>`).join('') +
+        `<div style="margin-top:8px;font-size:10px;color:var(--gray4);">※ 기준별 점수는 운영 목표 추정치입니다. 고객이 직접 항목별 평가 시 갱신됩니다.</div>`;
+    }
+    // 개선 권고 박스 — 실 미해결 패턴 수로 동적 업데이트
+    const advEl = document.getElementById('evalAdvice');
+    if (advEl) {
+      const unresolvedCount = _top10Data?.patterns?.filter(p => !p.resolved).length
+        ?? _p4Data?.patterns?.filter(p => !p.resolved).length
+        ?? null;
+      const cntText = unresolvedCount !== null ? `KB 미해결 ${unresolvedCount}건` : 'KB 미해결 패턴';
+      const avgTxt  = s.avgScore ? `현재 평균 평점 ${s.avgScore}점` : '평점 데이터 집계중';
+      advEl.innerHTML = `💡 <strong>개선 권고</strong><br>${avgTxt}<br>→ P3 톤 갱신 + ${cntText} 완료 시 NPS 상승 예상`;
     }
   } catch(e) { showNotif('평가 로드 실패','error'); }
 }
