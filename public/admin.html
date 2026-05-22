@@ -335,10 +335,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p1">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">D · 문서 정제</div><div class="kpi-val blue" id="p1d">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">R · RAG 검색</div><div class="kpi-val teal" id="p1r">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">T · 3톤 분리</div><div class="kpi-val orange" id="p1t">1.5</div><div class="kpi-trend">/2.0 · 목표 2.0</div></div>
-    <div class="kpi-card green"><div class="kpi-label">L · 폐곡선</div><div class="kpi-val green" id="p1l">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">D · 문서 정제</div><div class="kpi-val blue" id="p1d">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div><button class="btn-detail" onclick="showP1Detail('d')">세부내용</button></div>
+    <div class="kpi-card teal" style="position:relative;"><div class="kpi-label">R · RAG 검색</div><div class="kpi-val teal" id="p1r">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div><button class="btn-detail" onclick="showP1Detail('r')">세부내용</button></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">T · 3톤 분리</div><div class="kpi-val orange" id="p1t">1.5</div><div class="kpi-trend">/2.0 · 목표 2.0</div><button class="btn-detail" onclick="showP1Detail('t')">세부내용</button></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">L · 폐곡선</div><div class="kpi-val green" id="p1l">1.0</div><div class="kpi-trend">/2.0 · 목표 1.5</div><button class="btn-detail" onclick="showP1Detail('l')">세부내용</button></div>
   </div>
   <div class="grid-2">
     <div class="card">
@@ -1326,6 +1326,10 @@ async function loadP3() {
 }
 
 // ══════════════════════════════════════════
+// P1 KB 진단
+// ══════════════════════════════════════════
+let _p1Data = null;
+
 // P4 폐곡선
 // ══════════════════════════════════════════
 let _p4Data = null;
@@ -2344,6 +2348,7 @@ async function loadLogs() {
 async function loadP1() {
   try {
     const d = await api('/pipeline');
+    _p1Data = d;
     if (d.p1) {
       ['d','r','t','l'].forEach(k => {
         const el = document.getElementById('p1'+k);
@@ -2362,6 +2367,133 @@ async function loadP1() {
       }
     }
   } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+// P1 KB진단 세부내용
+// ══════════════════════════════════════════
+async function showP1Detail(type) {
+  if (!_p1Data) {
+    const d = await api('/pipeline');
+    _p1Data = d;
+  }
+  const p1 = _p1Data?.p1 || {};
+  const p2 = _p1Data?.p2 || {};
+  const p3 = _p1Data?.p3 || {};
+  const p4 = _p1Data?.p4 || {};
+
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const score = (v, target) => {
+    if (v === undefined || v === null) return 'gray';
+    return v >= target ? 'green' : v >= target * 0.7 ? 'yellow' : 'orange';
+  };
+
+  const dVal  = p1.d ?? 1.0;
+  const rVal  = p1.r ?? 1.0;
+  const tVal  = p1.t ?? 1.5;
+  const lVal  = p1.l ?? 1.0;
+  const total = p1.score ?? (dVal + rVal + tVal + lVal);
+
+  const docCount  = p2.docCount  || _engineData?.docCount  || 56;
+  const vocabSize = p2.vocabSize || _engineData?.vocabSize || '—';
+  const faqCount  = typeof docCount === 'number' ? docCount - 4 : '—';
+  const acc       = p2.accuracy      ?? '—';
+  const halluc    = p2.hallucination ?? '—';
+  const srcRate   = p2.sourceRate    ?? '—';
+  const tone      = p3.toneRatio     || {};
+  const top10Done  = p4.top10Done  ?? '—';
+  const top10Total = p4.top10Total ?? '—';
+
+  const kbTarget   = 50;
+  const kbCoverage = typeof docCount === 'number' ? Math.min(100, Math.round(docCount / kbTarget * 100)) : '—';
+
+  const configs = {
+    d: {
+      title: '📂 D · 문서 정제 — 세부내용',
+      desc: '<b>문서 정제(Document Quality)</b>는 KB 지식베이스의 문서 수가 목표치 대비 얼마나 충족되었는지를 나타내는 점수입니다. ' +
+            'FAQ 문항 + 정책 문서 합계를 목표 50개와 비교하여 <b>(현재 문서 수 / 50) × 2.0</b> 공식으로 산정합니다. ' +
+            '최대 2.0점이며, 문항이 많을수록 고객 질문 커버리지가 높아져 해결률이 상승합니다.',
+      rows: [
+        row('현재 문서 정제 점수',  dVal + ' / 2.0',                               score(dVal, 1.5)),
+        row('목표 점수',            '1.5 / 2.0 (2026 Q2)',                          'blue'),
+        row('목표까지 갭',          dVal < 1.5 ? (1.5 - dVal).toFixed(1) + '점 부족' : '목표 달성 ✅', dVal >= 1.5 ? 'green' : 'orange'),
+        row('현재 총 KB 문서',      docCount + '개 (FAQ ' + faqCount + ' + 정책 4)', 'blue'),
+        row('목표 KB 문서',         '50개 이상',                                    'blue'),
+        row('KB 달성률',            kbCoverage + '%',                               kbCoverage >= 100 ? 'green' : 'yellow'),
+        row('점수 산식',            '(문서 수 / 50) × 2.0 · 상한 2.0',              'gray'),
+        row('개선 방법',            'FAQ 관리 → 항목 추가·보강',                    'gray'),
+      ],
+    },
+    r: {
+      title: '🔍 R · RAG 검색 — 세부내용',
+      desc: '<b>RAG 검색(Retrieval-Augmented Generation)</b> 점수는 KB 문서에 검색 키워드가 얼마나 잘 정의되어 있는지를 나타냅니다. ' +
+            '키워드 배열이 있는 FAQ의 비율로 산정하며, 키워드가 풍부할수록 <b>TF-IDF 코사인 유사도</b> 검색 정밀도가 높아집니다. ' +
+            '현재 인메모리 TF-IDF 방식으로 외부 AI API 없이 순수 로컬 연산합니다.',
+      rows: [
+        row('현재 RAG 검색 점수',   rVal + ' / 2.0',                               score(rVal, 1.5)),
+        row('목표 점수',            '1.5 / 2.0 (2026 Q2)',                          'blue'),
+        row('검색 알고리즘',        'TF-IDF + 코사인 유사도 (인메모리)',             'blue'),
+        row('외부 AI API',          '없음 — 완전 로컬 연산',                        'green'),
+        row('어휘 사전 크기',       vocabSize + '개 토큰',                           'blue'),
+        row('응답 정확도',          (acc !== '—' ? acc + '%' : '—'),                score(acc === '—' ? null : acc, 80)),
+        row('환각 발생률',          (halluc !== '—' ? halluc + '%' : '—'),          halluc !== '—' && halluc <= 2 ? 'green' : halluc !== '—' && halluc <= 10 ? 'yellow' : 'orange'),
+        row('점수 산식',            '키워드 보유 FAQ / 전체 FAQ × 1.0',             'gray'),
+        row('개선 방법',            'FAQ 관리 → 각 항목 키워드 보강',               'gray'),
+      ],
+    },
+    t: {
+      title: '🎨 T · 3톤 분리 — 세부내용',
+      desc: '<b>3톤 분리(3-Tone Separation)</b> 점수는 챗봇이 고객 상황에 맞는 응답 톤을 얼마나 정확하게 적용하는지를 나타냅니다. ' +
+            '공감톤(일반 안내) · 거절톤(정책 위반) · 에스컬레이션(담당자 연결)의 3가지 톤이 12가지 상황 분류에 따라 자동 선택됩니다. ' +
+            'KB 출처 제공률(sourceRate)을 기반으로 <b>(출처 제공률 / 100) × 1.5</b> 공식으로 산정합니다.',
+      rows: [
+        row('현재 3톤 분리 점수',   tVal + ' / 2.0',                               score(tVal, 2.0)),
+        row('목표 점수',            '2.0 / 2.0 (최대 목표)',                        'blue'),
+        row('목표까지 갭',          tVal < 2.0 ? (2.0 - tVal).toFixed(1) + '점 부족' : '최고 목표 달성 ✅', tVal >= 2.0 ? 'green' : 'yellow'),
+        row('공감톤 비율',          (tone.empathy  ?? '—') + (tone.empathy  != null ? '%' : ''), 'teal'),
+        row('거절톤 비율',          (tone.reject   ?? '—') + (tone.reject   != null ? '%' : ''), 'orange'),
+        row('에스컬레이션 비율',    (tone.escalate ?? '—') + (tone.escalate != null ? '%' : ''), 'yellow'),
+        row('12상황 분류',          '12개 상황 운영 중',                            'blue'),
+        row('KB 출처 제공률',       (srcRate !== '—' ? srcRate + '%' : '—'),        score(srcRate === '—' ? null : srcRate, 80)),
+        row('점수 산식',            '(출처 제공률 / 100) × 1.5',                   'gray'),
+        row('개선 방법',            'P3 상황 분류 정밀화 · 톤 파라미터 조정',       'gray'),
+      ],
+    },
+    l: {
+      title: '🔄 L · 폐곡선 — 세부내용',
+      desc: '<b>폐곡선(Closed-Loop)</b> 점수는 KB 문서가 법령을 얼마나 커버하는지와 미해결 패턴이 KB에 반영되는 순환 개선 사이클의 완성도를 나타냅니다. ' +
+            '화장품법 · 개인정보보호법 · 전자상거래법 등 법령을 참조하는 FAQ 비율로 산정합니다. ' +
+            '미해결 질문 → P4 Top10 집계 → SOP 미팅 → KB 갱신의 <b>4단계 폐곡선</b>이 핵심입니다.',
+      rows: [
+        row('현재 폐곡선 점수',     lVal + ' / 2.0',                               score(lVal, 1.5)),
+        row('목표 점수',            '1.5 / 2.0 (2026 Q2)',                          'blue'),
+        row('목표까지 갭',          lVal < 1.5 ? (1.5 - lVal).toFixed(1) + '점 부족' : '목표 달성 ✅', lVal >= 1.5 ? 'green' : 'orange'),
+        row('미해결 Top10 완료',    top10Done + '건',                               'green'),
+        row('미해결 Top10 전체',    top10Total + '건',                              'blue'),
+        row('Top10 처리율',         (top10Total > 0 ? Math.round(top10Done / top10Total * 100) : '—') + '%', top10Done >= top10Total ? 'green' : 'yellow'),
+        row('다음 SOP 미팅',        p4.nextMeeting || '2026-06-03 14:00',           'blue'),
+        row('Argyris 상태',         p4.argyrisState || p1.argyris || 'Single→Double 전환중', 'yellow'),
+        row('점수 산식',            '법령 참조 FAQ / 전체 FAQ × 1.0',               'gray'),
+        row('개선 방법',            '법령 참조 FAQ 추가 · SOP 미팅 Top10 처리 완료','gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  if (!cfg) return;
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>
+     <div style="margin-top:12px;padding:10px 14px;background:var(--sky);border-radius:8px;font-size:11px;color:var(--primary);">
+       📊 KB 진단 총점: <b>${total} / 8.0</b> &nbsp;|&nbsp; 목표: 6.0 (2026 Q4)
+     </div>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 // ══════════════════════════════════════════
