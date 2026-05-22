@@ -446,10 +446,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p5">
   <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">✅ 정상</div><div class="kpi-val green" id="p5Ok">—</div><div class="kpi-trend" id="p5OkTrend">건</div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">🔄 시정중</div><div class="kpi-val yellow" id="p5Warn">—</div><div class="kpi-trend" id="p5WarnTrend">건</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">🌿 화장품법</div><div class="kpi-val teal" id="p5CosmCount">—</div><div class="kpi-trend" id="p5CosmTrend">항목</div></div>
-    <div class="kpi-card blue"><div class="kpi-label">📐 COSO ERM</div><div class="kpi-val blue" style="font-size:18px;" id="p5Coso">—</div><div class="kpi-trend" id="p5CosoTrend">—</div></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">✅ 정상</div><div class="kpi-val green" id="p5Ok">—</div><div class="kpi-trend" id="p5OkTrend">건</div><button class="btn-detail" onclick="showP5Detail('ok')">세부내용</button></div>
+    <div class="kpi-card yellow" style="position:relative;"><div class="kpi-label">🔄 시정중</div><div class="kpi-val yellow" id="p5Warn">—</div><div class="kpi-trend" id="p5WarnTrend">건</div><button class="btn-detail" onclick="showP5Detail('warn')">세부내용</button></div>
+    <div class="kpi-card teal" style="position:relative;"><div class="kpi-label">🌿 화장품법</div><div class="kpi-val teal" id="p5CosmCount">—</div><div class="kpi-trend" id="p5CosmTrend">항목</div><button class="btn-detail" onclick="showP5Detail('cosm')">세부내용</button></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">📐 COSO ERM</div><div class="kpi-val blue" style="font-size:18px;" id="p5Coso">—</div><div class="kpi-trend" id="p5CosoTrend">—</div><button class="btn-detail" onclick="showP5Detail('coso')">세부내용</button></div>
   </div>
   <div class="card">
     <div class="card-title"><span class="card-icon">🛡️</span>6항목 컴플라이언스 점검 현황</div>
@@ -1646,9 +1646,11 @@ function showPipeDetail(type) {
 // ══════════════════════════════════════════
 // P5 컴플라이언스
 // ══════════════════════════════════════════
+let _p5Data = null;
 async function loadP5() {
   try {
     const [d, pipe] = await Promise.all([api('/compliance'), api('/pipeline')]);
+    _p5Data = { d, pipe };
 
     // ── KPI 카드 실데이터 반영 ──
     const okCnt    = d.items.filter(i => i.status === 'ok').length;
@@ -1705,6 +1707,125 @@ async function loadP5() {
         <div style="font-size:11px;color:var(--gray4);">${v.detail}</div>
       </div>`).join('');
   } catch(e) { showNotif('P5 로드 실패','error'); }
+}
+
+// ══════════════════════════════════════════
+// P5 컴플라이언스 세부내용
+// ══════════════════════════════════════════
+async function showP5Detail(type) {
+  if (!_p5Data) {
+    const [d, pipe] = await Promise.all([api('/compliance'), api('/pipeline')]);
+    _p5Data = { d, pipe };
+  }
+  const d    = _p5Data.d    || {};
+  const pipe = _p5Data.pipe || {};
+
+  const row  = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const items      = d.items    || [];
+  const cosmLaw    = d.cosmLaw  || [];
+  const coso       = d.coso     || {};
+
+  const okItems    = items.filter(i => i.status === 'ok');
+  const warnItems  = items.filter(i => i.status === 'warn');
+  const alertItems = items.filter(i => i.status === 'alert');
+  const okCnt      = okItems.length;
+  const warnCnt    = warnItems.length;
+  const alertCnt   = alertItems.length;
+  const totalCnt   = items.length;
+
+  const cosmOk      = cosmLaw.filter(c => c.status === 'ok').length;
+  const cosmBlocked = pipe?.p5?.cosmLawBlocked ?? 0;
+
+  const cosoStatuses = Object.values(coso).map(v => v.status);
+  const cosoAlertCnt = cosoStatuses.filter(s => s === 'alert').length;
+  const cosoWarnCnt  = cosoStatuses.filter(s => s === 'warn').length;
+  const cosoLabel    = cosoAlertCnt > 0 ? '요주의' : cosoWarnCnt > 0 ? '부분구축' : '양호';
+
+  const statusBadge = s => s === 'ok' ? 'green' : s === 'warn' ? 'yellow' : 'orange';
+  const statusLabel = s => s === 'ok' ? '✅ 정상' : s === 'warn' ? '🔄 시정중' : '❗ 즉시시정';
+
+  const configs = {
+    ok: {
+      title: '✅ 정상 항목 — 세부내용',
+      desc: '<b>정상(OK)</b>은 법규 및 운영 정책이 완전히 구축·적용 중인 컴플라이언스 항목입니다. ' +
+            'TrapValidator(PII 마스킹), FAQ 정책 문서, 법적 기준 가이드라인이 모두 반영된 항목으로 ' +
+            '현재 고객 응답에 실제로 적용되어 작동 중입니다.',
+      rows: [
+        row('정상 항목 수',    okCnt + '건 / 전체 ' + totalCnt + '항목',  'green'),
+        row('전체 준수율',     totalCnt ? Math.round(okCnt / totalCnt * 100) + '%' : '—', okCnt === totalCnt ? 'green' : 'yellow'),
+        ...okItems.map(i => row(i.name, i.law, 'green')),
+        row('즉시시정 항목',  alertCnt > 0 ? alertCnt + '건 존재' : '없음', alertCnt > 0 ? 'orange' : 'green'),
+        row('데이터 기준',    '컴플라이언스 항목 6개 정적 점검', 'gray'),
+      ],
+    },
+    warn: {
+      title: '🔄 시정중 항목 — 세부내용',
+      desc: '<b>시정중(WARN)</b>은 법규 구축이 진행 중이거나 일부 미완료인 항목입니다. ' +
+            '목표 완료 일정이 설정되어 있으며, SOP 미팅에서 우선순위가 결정됩니다. ' +
+            '<b>즉시시정(ALERT)</b>은 이미 위반 가능성이 있어 즉각 조치가 필요한 항목입니다.',
+      rows: [
+        row('시정중 항목 수',  warnCnt + '건',   warnCnt === 0 ? 'green' : 'yellow'),
+        row('즉시시정 항목',   alertCnt + '건',  alertCnt === 0 ? 'green' : 'orange'),
+        ...warnItems.map(i  => row('🔄 ' + i.name, (i.dueDate || i.completedAt || '일정 미정') + ' · ' + i.law, 'yellow')),
+        ...alertItems.map(i => row('❗ ' + i.name, (i.dueDate || i.completedAt || '즉시 조치') + ' · ' + i.law, 'orange')),
+        row('완료 시 효과',   '전체 준수율 ' + (totalCnt ? Math.round((okCnt + warnCnt + alertCnt) / totalCnt * 100) : 0) + '% → 100% 목표', 'blue'),
+        row('시정 우선순위',  'P4 SOP 미팅에서 분기별 결정', 'gray'),
+        row('목표 완료',      '2026년 Q2 전항목 정상 전환 목표', 'gray'),
+      ],
+    },
+    cosm: {
+      title: '🌿 화장품법 반영 — 세부내용',
+      desc: '<b>화장품법</b>은 화장품의 제조·유통·광고·부작용 신고에 관한 핵심 법령입니다. ' +
+            'JHC Honey 챗봇은 화장품법 주요 조항을 FAQ·정책 문서에 반영하여 ' +
+            '<b>기능성 효능 단정 금지·부작용 신고 안내·전성분 표시 안내</b> 등을 자동 적용합니다. ' +
+            'TrapValidator가 화장품법 위반 표현을 실시간 차단합니다.',
+      rows: [
+        row('반영 조항 수',      cosmLaw.length + '개 조항',  cosmOk === cosmLaw.length ? 'green' : 'yellow'),
+        row('전항목 반영 여부',  cosmOk === cosmLaw.length ? '✅ 전항목 반영 완료' : cosmOk + '/' + cosmLaw.length + ' 반영', cosmOk === cosmLaw.length ? 'green' : 'yellow'),
+        row('위반 표현 차단',    cosmBlocked + '건 차단 (최근 30일)',  cosmBlocked > 0 ? 'orange' : 'green'),
+        ...cosmLaw.map(c => row(c.article, c.desc.substring(0, 30) + '… (FAQ ' + c.faq + ')', statusBadge(c.status))),
+        row('단정 금지 대상',    '부작용 수치·기능성 효능·임산부 가능 등', 'gray'),
+        row('대안 표현',         '전문의 상담 권유·공인 인증 확인 안내', 'gray'),
+        row('화장품법 위반 감지', 'TrapValidator COSM_LAW_VIOLATION 룰', 'gray'),
+      ],
+    },
+    coso: {
+      title: '📐 COSO ERM 진단 — 세부내용',
+      desc: '<b>COSO ERM(Enterprise Risk Management)</b>은 운영·전략·준법·보고 4개 범주로 ' +
+            '조직의 리스크 관리 성숙도를 평가하는 국제 표준 프레임워크입니다. ' +
+            '챗봇 운영 리스크를 4개 관점에서 진단하며, 각 범주는 ' +
+            '<b>양호(OK)·부분구축(WARN)·요주의(ALERT)</b> 3단계로 평가됩니다.',
+      rows: [
+        row('전체 종합 등급',   cosoLabel,   cosoAlertCnt > 0 ? 'orange' : cosoWarnCnt > 0 ? 'yellow' : 'green'),
+        row('요주의(ALERT)',    cosoAlertCnt + '개 범주', cosoAlertCnt > 0 ? 'orange' : 'green'),
+        row('부분구축(WARN)',   cosoWarnCnt  + '개 범주', cosoWarnCnt  > 0 ? 'yellow' : 'green'),
+        row('양호(OK)',         (4 - cosoAlertCnt - cosoWarnCnt) + '개 범주', 'green'),
+        ...Object.entries(coso).map(([k, v]) => row(
+          { operations:'운영 리스크', strategic:'전략 리스크', compliance:'준법 리스크', reporting:'보고 리스크' }[k] || k,
+          statusLabel(v.status) + ' · ' + v.detail,
+          statusBadge(v.status)
+        )),
+        row('평가 주기',       '분기 1회 SOP 점검 (P4 폐곡선 연동)', 'gray'),
+        row('목표 등급',       '전범주 양호 (2026 Q4 목표)',          'gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  if (!cfg) return;
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>
+     <div style="margin-top:12px;padding:10px 14px;background:var(--sky);border-radius:8px;font-size:11px;color:var(--primary);">
+       📋 컴플라이언스 현황: 정상 <b>${okCnt}건</b> &nbsp;|&nbsp; 시정중 <b>${warnCnt}건</b> &nbsp;|&nbsp; 즉시시정 <b>${alertCnt}건</b> &nbsp;|&nbsp; COSO: <b>${cosoLabel}</b>
+     </div>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 // ══════════════════════════════════════════
