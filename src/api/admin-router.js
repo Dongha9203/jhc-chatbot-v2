@@ -127,13 +127,14 @@ async function safeGetStats() {
 }
 
 async function safeGetTop10(days) {
+  if (!logManager.client) return { data: [], source: 'no_db' };
   try {
     const rows = await logManager.getAllPatterns(days);
-    if (rows.length > 0) return rows;
+    return { data: rows, source: rows.length > 0 ? 'db' : 'empty' };
   } catch (e) {
-    logger.warn('Top10 조회 오류 — 시뮬레이션 반환', e.message);
+    logger.warn('Top10 조회 오류 — 빈 결과 반환', e.message);
+    return { data: [], source: 'error' };
   }
-  return SIM_TOP10;
 }
 
 // ═══════════════════════════════════════════
@@ -141,7 +142,7 @@ async function safeGetTop10(days) {
 // ═══════════════════════════════════════════
 router.get('/dashboard', async (req, res) => {
   try {
-    const [stats, top10] = await Promise.all([safeGetStats(), safeGetTop10(30)]);
+    const [stats, top10Result, pipeline] = await Promise.all([safeGetStats(), safeGetTop10(30), getPipelineStatus()]);
     const engine   = searchEngine.getStats();
     const avgScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
 
@@ -155,9 +156,10 @@ router.get('/dashboard', async (req, res) => {
         escalated:     stats.escalated || 0,
       },
       engine,
-      recentTop5:  top10.slice(0, 5),
+      recentTop5:   top10Result.data.slice(0, 5),
+      top10Source:  top10Result.source,
       recentEvals: evaluations.slice(0, 3),
-      pipeline: getPipelineStatus(),
+      pipeline,
     });
   } catch (e) {
     logger.error('dashboard API error', e);
@@ -201,15 +203,22 @@ router.get('/stats', async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /admin/api/engine — P2 RAG 엔진 상태
 // ═══════════════════════════════════════════
-router.get('/engine', (req, res) => {
+router.get('/engine', async (req, res) => {
   const stats = searchEngine.getStats();
-  const sim   = getSimulatedStats();
+  const [accStats, trapStats] = await Promise.all([
+    logManager.getAccuracyStats(30),
+    logManager.getTrapStats(30),
+  ]);
+  const trapCounts = trapStats || trapValidator.getBlockStats();
   res.json({
     ...stats,
-    accuracy:     81,
-    hallucination: 5,
-    trapBlocked: sim.trapBlocked,
-    piiMasked:   sim.piiMasked,
+    accuracy:      accStats ? accStats.accuracy      : 81,
+    hallucination: accStats ? accStats.hallucination : 5,
+    sourceRate:    accStats ? accStats.sourceRate     : 80,
+    accuracySource: accStats ? 'db' : 'simulation',
+    trapBlocked:  trapCounts,
+    trapSource:   trapStats ? 'db' : 'runtime',
+    piiMasked:    trapCounts.piiMasked,
     chromaStatus: stats.mode === 'chromadb' ? 'online' : 'offline',
     cacheHitRate: '34%',
     avgResponseMs: 4.2,
@@ -222,8 +231,8 @@ router.get('/engine', (req, res) => {
 // ═══════════════════════════════════════════
 router.get('/top10', async (req, res) => {
   const days = parseInt(req.query.days) || 30;
-  const data = await safeGetTop10(days);
-  res.json({ period: `최근 ${days}일`, count: data.length, patterns: data });
+  const { data, source } = await safeGetTop10(days);
+  res.json({ period: `최근 ${days}일`, count: data.length, patterns: data, source });
 });
 
 router.patch('/top10/:id', async (req, res) => {
@@ -356,19 +365,33 @@ router.get('/compliance', (req, res) => {
 // ═══════════════════════════════════════════
 // GET /admin/api/pipeline — P1~P5 전체 상태
 // ═══════════════════════════════════════════
-function getPipelineStatus() {
-  const engine = searchEngine.getStats();
+async function getPipelineStatus() {
+  const engine    = searchEngine.getStats();
+  const [accStats, toneStats, trapStats] = await Promise.all([
+    logManager.getAccuracyStats(30),
+    logManager.getToneStats(30),
+    logManager.getTrapStats(30),
+  ]);
+  const toneRatio  = toneStats || { empathy: 62, reject: 23, escalate: 15 };
+  const trapCounts = trapStats || trapValidator.getBlockStats();
   return {
     p1: { score: 4.5, max: 8, d: 1.0, r: 1.0, t: 1.5, l: 1.0, argyris: 'Single→Double 전환중' },
-    p2: { accuracy: 81, hallucination: 5, sourceRate: 80, mode: engine.mode, vocabSize: engine.vocabSize, docCount: engine.docCount },
-    p3: { situations: 12, tones: 3, toneRatio: { empathy: 62, reject: 23, escalate: 15 } },
+    p2: {
+      accuracy:      accStats ? accStats.accuracy      : 81,
+      hallucination: accStats ? accStats.hallucination : 5,
+      sourceRate:    accStats ? accStats.sourceRate     : 80,
+      accuracySource: accStats ? 'db' : 'simulation',
+      mode: engine.mode, vocabSize: engine.vocabSize, docCount: engine.docCount,
+      trapBlocked: trapCounts, trapSource: trapStats ? 'db' : 'runtime',
+    },
+    p3: { situations: 12, tones: 3, toneRatio, toneSource: toneStats ? 'db' : 'simulation' },
     p4: { top10Done: 4, top10Total: 10, nextMeeting: '2026-06-03 14:00', argyrisState: 'Single→Double 전환중' },
     p5: { ok: 4, warn: 2, alert: 0, cosmLawItems: 4 },
   };
 }
 
-router.get('/pipeline', (req, res) => {
-  res.json(getPipelineStatus());
+router.get('/pipeline', async (req, res) => {
+  res.json(await getPipelineStatus());
 });
 
 // ═══════════════════════════════════════════
@@ -455,13 +478,23 @@ router.post('/chat/test', async (req, res) => {
 
   if (!chatPipeline.initialized) await chatPipeline.init();
 
-  const result = await chatPipeline.process({
-    input,
-    userId:  'admin_test_' + Date.now(),
-    userName,
+  const userId = 'admin_test_' + Date.now();
+  const result = await chatPipeline.process({ input, userId, userName, channel, history: [] });
+
+  await logManager.save({
+    userId,
     channel,
-    history: [],
+    input,
+    response:    result.response,
+    situation:   result.situation,
+    searchScore: result.searchScore,
+    resolved:    result.resolved,
+    source:      result.source,
+    category:    result.category,
+    escalated:   result.escalate,
+    issues:      result.issues,
   });
+
   res.json(result);
 });
 

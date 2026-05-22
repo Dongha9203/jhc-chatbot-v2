@@ -28,7 +28,7 @@ class LogManager {
   }
 
   // ── 로그 저장 ──
-  async save({ userId, channel, input, response, situation, searchScore, resolved, source, escalated, category }) {
+  async save({ userId, channel, input, response, situation, searchScore, resolved, source, escalated, category, issues }) {
     if (!this.client) return;
     try {
       const { data, error } = await this.client
@@ -50,15 +50,59 @@ class LogManager {
 
       if (error) throw error;
 
+      const logId = data?.id;
       if (!resolved) await this._aggregateUnresolved(input);
+      if (issues?.length) await this.saveTrapEvents(issues, logId);
 
       const autoScore = escalated ? 3 : (resolved ? 5 : 4);
       await this.saveEvaluation({
-        logId: data?.id, userId, channel,
+        logId, userId, channel,
         score: autoScore, situation, source,
       });
     } catch (err) {
       logger.error('로그 저장 오류', err);
+    }
+  }
+
+  // ── 함정 이벤트 저장 ──
+  async saveTrapEvents(issues, logId) {
+    if (!this.client || !issues?.length) return;
+    const TRAP_TYPES = new Set(['TRAP1_HALLUCINATION','TRAP2_DEFINITE','TRAP3_SINGLE_ANSWER','COSM_LAW_VIOLATION','PII_MASKED','SECURITY']);
+    const rows = issues
+      .filter(i => TRAP_TYPES.has(i.type))
+      .map(i => ({
+        trap_type: i.type,
+        log_id:    logId || null,
+      }));
+    if (!rows.length) return;
+    const { error } = await this.client.from('trap_events').insert(rows);
+    if (error) logger.error('함정 이벤트 저장 오류', error);
+  }
+
+  // ── 함정 차단 통계 조회 ──
+  async getTrapStats(days = 30) {
+    if (!this.client) return null;
+    try {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await this.client
+        .from('trap_events')
+        .select('trap_type')
+        .gte('created_at', since);
+      if (error) throw error;
+
+      const counts = { trap1: 0, trap2: 0, trap3: 0, cosmLaw: 0, piiMasked: 0, security: 0 };
+      for (const row of data || []) {
+        if (row.trap_type === 'TRAP1_HALLUCINATION')  counts.trap1++;
+        else if (row.trap_type === 'TRAP2_DEFINITE')       counts.trap2++;
+        else if (row.trap_type === 'TRAP3_SINGLE_ANSWER')  counts.trap3++;
+        else if (row.trap_type === 'COSM_LAW_VIOLATION')   counts.cosmLaw++;
+        else if (row.trap_type === 'PII_MASKED')           counts.piiMasked++;
+        else if (row.trap_type === 'SECURITY')             counts.security++;
+      }
+      return counts;
+    } catch (err) {
+      logger.error('함정 통계 조회 오류', err);
+      return null;
     }
   }
 
@@ -203,6 +247,64 @@ class LogManager {
     } catch (err) {
       logger.error('로그 조회 오류', err);
       return { rows: [], total: 0 };
+    }
+  }
+
+  // ── P2 정확도 집계 ──
+  async getAccuracyStats(days = 30) {
+    if (!this.client) return null;
+    try {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await this.client
+        .from('chat_logs')
+        .select('resolved, search_score')
+        .gte('created_at', since);
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+
+      const total      = data.length;
+      const resolved   = data.filter(r => r.resolved).length;
+      const accuracy   = Math.round(resolved / total * 100);
+      const avgScore   = data.reduce((s, r) => s + (r.search_score || 0), 0) / total;
+      const hallucination = Math.round(data.filter(r => !r.resolved && (r.search_score || 0) < 0.25).length / total * 100);
+      const sourceRate = Math.round(data.filter(r => r.resolved).length / total * 100);
+
+      return { accuracy, hallucination, sourceRate, avgScore: avgScore.toFixed(3), total };
+    } catch (err) {
+      logger.error('정확도 통계 오류', err);
+      return null;
+    }
+  }
+
+  // ── P3 톤 비율 집계 ──
+  async getToneStats(days = 30) {
+    if (!this.client) return null;
+    try {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await this.client
+        .from('chat_logs')
+        .select('situation, escalated')
+        .gte('created_at', since);
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+
+      const REJECT_SITUATIONS = new Set(['정책_위반', '단순_거절', '복합_정책']);
+      let empathy = 0, reject = 0, escalate = 0;
+      for (const row of data) {
+        if (row.escalated) { escalate++; }
+        else if (REJECT_SITUATIONS.has(row.situation)) { reject++; }
+        else { empathy++; }
+      }
+      const total = empathy + reject + escalate || 1;
+      return {
+        empathy:  Math.round(empathy  / total * 100),
+        reject:   Math.round(reject   / total * 100),
+        escalate: Math.round(escalate / total * 100),
+        total,
+      };
+    } catch (err) {
+      logger.error('톤 통계 오류', err);
+      return null;
     }
   }
 

@@ -107,6 +107,8 @@ class WebhookHandler {
       resolved:    result.resolved,
       source:      result.source,
       category:    result.category,
+      escalated:   result.escalate,
+      issues:      result.issues,
     });
 
     // ── 카카오톡 응답 형식으로 변환 ──

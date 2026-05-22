@@ -33,6 +33,14 @@ const SECURITY_PATTERNS = [
 ];
 
 class TrapValidator {
+  constructor() {
+    this._counts = { trap1: 0, trap2: 0, trap3: 0, cosmLaw: 0, piiMasked: 0, security: 0 };
+  }
+
+  getBlockStats() {
+    return { ...this._counts };
+  }
+
   /**
    * 입력 검증
    */
@@ -42,6 +50,7 @@ class TrapValidator {
     // 보안 공격 탐지
     if (SECURITY_PATTERNS.some(p => p.test(input))) {
       issues.push({ type: 'SECURITY', severity: 'BLOCK', msg: '허용되지 않는 요청입니다.' });
+      this._counts.security++;
     }
 
     return { valid: issues.filter(i => i.severity === 'BLOCK').length === 0, issues };
@@ -63,6 +72,7 @@ class TrapValidator {
           severity: 'WARN',
           msg: '검색 결과 없는데 응답 생성됨 → 정보부재 처리 필요',
         });
+        this._counts.trap1++;
       }
     }
 
@@ -74,6 +84,7 @@ class TrapValidator {
         severity: 'WARN',
         msg: '책임 단정 표현 감지 → 케이스별 안내로 수정 필요',
       });
+      this._counts.trap2++;
     }
 
     // ── 함정 3: 복합 단답 ──
@@ -83,6 +94,7 @@ class TrapValidator {
         severity: 'WARN',
         msg: '복합 질문에 단답 응답 → 항목별 분리 필요',
       });
+      this._counts.trap3++;
     }
 
     // ── 화장품법 위반 ──
@@ -93,6 +105,7 @@ class TrapValidator {
         msg: '화장품법 위반 표현 감지 — 응답 차단',
       });
       sanitized = this._cosmLawFallback();
+      this._counts.cosmLaw++;
     }
 
     // ── 개인정보 마스킹 ──
@@ -100,6 +113,7 @@ class TrapValidator {
       if (pattern.test(sanitized)) {
         sanitized = sanitized.replace(pattern, replace);
         issues.push({ type: 'PII_MASKED', severity: 'INFO', msg: `${label} 마스킹 적용` });
+        this._counts.piiMasked++;
       }
     });
 

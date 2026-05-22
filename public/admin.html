@@ -606,6 +606,9 @@ tr:hover td{background:var(--sky);}
     <div class="card-title"><span class="card-icon">❗</span>미해결 Top10 — P4 폐곡선 월간 SOP
       <span style="font-size:11px;color:var(--gray4);font-weight:400;margin-left:auto;">다음 미팅: 2026.06.03 (화) 14:00</span>
     </div>
+    <div id="top10NoDbBanner" style="display:none;margin-bottom:8px;padding:8px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;font-size:11px;color:#92400E;">
+      ⚠️ <strong>Supabase 미연결</strong> — 실제 대화 로그가 없어 미해결 패턴을 집계할 수 없습니다. 아래는 실데이터가 아닙니다.
+    </div>
     <div id="top10Table"><div class="loading"><span class="spin"></span></div></div>
   </div>
 </div>
@@ -885,7 +888,7 @@ async function loadDashboard() {
     renderPipeline(data.pipeline, 'dashPipeline');
     renderTrendChart(stats.monthly);
     renderDonut(stats.byCategory, stats.totalMessages);
-    renderDashTop5(data.recentTop5);
+    renderDashTop5(data.recentTop5, data.top10Source);
     renderDashEval(data.recentEvals);
     if (data.engine) {
       document.getElementById('engineMode').textContent = data.engine.mode === 'chromadb' ? 'ChromaDB' : 'TF-IDF';
@@ -1093,9 +1096,15 @@ function renderDonut(byCategory, totalMessages) {
   if (leg) leg.innerHTML = cats.map(c=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><div style="width:8px;height:8px;border-radius:50%;background:${c.color};flex-shrink:0;"></div><span>${c.label} ${c.pct}%</span></div>`).join('');
 }
 
-function renderDashTop5(data) {
+function renderDashTop5(data, source) {
   const el = document.getElementById('dashTop5');
-  if (!el || !data) return;
+  if (!el) return;
+  if (!data || data.length === 0) {
+    el.innerHTML = `<div style="padding:20px 0;text-align:center;color:var(--gray3);font-size:11px;">
+      📭 실데이터 없음<br><span style="font-size:10px;">Supabase 미연결 — 실제 미해결 패턴 없음</span>
+    </div>`;
+    return;
+  }
   el.innerHTML = data.map((r,i)=>`
     <div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray2);">
       <strong style="font-family:Montserrat;font-size:16px;color:${i<3?'var(--accent2)':'var(--gray3)'};min-width:24px;">${r.id||i+1}</strong>
@@ -1912,6 +1921,7 @@ async function loadTop10() {
     const d = await api('/top10');
     _top10Data = d;
     const patterns   = d.patterns || [];
+    const source     = d.source || '';
     const done       = patterns.filter(p =>  p.resolved).length;
     const unresolved = patterns.filter(p => !p.resolved).length;
     const urgList    = patterns.filter(p => !p.resolved && isUrgent(p.pattern));
@@ -1921,7 +1931,10 @@ async function loadTop10() {
     document.getElementById('sbTop10').textContent    = unresolved;
     document.getElementById('t10Urgent').textContent  = urgList.length + '건';
     document.getElementById('t10UrgentTrend').textContent = urgList.length > 0 ? '정책·규정 관련' : '해당 없음';
-    renderTop10Table(patterns, 'top10Table');
+    // 실데이터 없음 배너
+    const noticeBannerEl = document.getElementById('top10NoDbBanner');
+    if (noticeBannerEl) noticeBannerEl.style.display = (source !== 'db') ? '' : 'none';
+    renderTop10Table(patterns, 'top10Table', source);
   } catch(e) { showNotif('Top10 로드 실패','error'); }
 }
 
@@ -2008,9 +2021,19 @@ function showTop10Detail(type) {
   document.getElementById('statDetailModal').classList.add('open');
 }
 
-function renderTop10Table(patterns, targetId) {
+function renderTop10Table(patterns, targetId, source) {
   const el = document.getElementById(targetId);
   if (!el || !patterns) return;
+  // 실데이터 없음 (Supabase 미연결)
+  if (patterns.length === 0 && source !== 'db') {
+    el.innerHTML = `<div style="padding:36px;text-align:center;">
+      <div style="font-size:32px;margin-bottom:10px;">📭</div>
+      <div style="font-size:13px;font-weight:700;color:var(--gray4);margin-bottom:6px;">실데이터 없음</div>
+      <div style="font-size:11px;color:var(--gray3);line-height:1.6;">Supabase가 연결되지 않아 실제 미해결 패턴을 불러올 수 없습니다.<br>
+      <code style="background:var(--gray2);padding:2px 6px;border-radius:4px;">config/.env</code>에 <strong>SUPABASE_URL</strong> · <strong>SUPABASE_SERVICE_ROLE_KEY</strong>를 설정하세요.</div>
+    </div>`;
+    return;
+  }
   // 미해결 항목만 표시 (갱신 완료 항목은 테이블에서 제거)
   const unresolved = patterns.filter(p => !p.resolved);
   const max = unresolved[0]?.count || 1;
