@@ -446,10 +446,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p5">
   <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">✅ 정상</div><div class="kpi-val green">4건</div><div class="kpi-trend"></div></div>
-    <div class="kpi-card yellow"><div class="kpi-label">🔄 시정중</div><div class="kpi-val yellow">2건</div><div class="kpi-trend"></div></div>
-    <div class="kpi-card teal"><div class="kpi-label">🌿 화장품법</div><div class="kpi-val teal">4건</div><div class="kpi-trend">전항목 반영</div></div>
-    <div class="kpi-card blue"><div class="kpi-label">📐 COSO ERM</div><div class="kpi-val blue" style="font-size:18px;">부분구축</div><div class="kpi-trend">준법·보고 미흡</div></div>
+    <div class="kpi-card green"><div class="kpi-label">✅ 정상</div><div class="kpi-val green" id="p5Ok">—</div><div class="kpi-trend" id="p5OkTrend">건</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">🔄 시정중</div><div class="kpi-val yellow" id="p5Warn">—</div><div class="kpi-trend" id="p5WarnTrend">건</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">🌿 화장품법</div><div class="kpi-val teal" id="p5CosmCount">—</div><div class="kpi-trend" id="p5CosmTrend">항목</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">📐 COSO ERM</div><div class="kpi-val blue" style="font-size:18px;" id="p5Coso">—</div><div class="kpi-trend" id="p5CosoTrend">—</div></div>
   </div>
   <div class="card">
     <div class="card-title"><span class="card-icon">🛡️</span>6항목 컴플라이언스 점검 현황</div>
@@ -1504,7 +1504,33 @@ function showPipeDetail(type) {
 // ══════════════════════════════════════════
 async function loadP5() {
   try {
-    const d = await api('/compliance');
+    const [d, pipe] = await Promise.all([api('/compliance'), api('/pipeline')]);
+
+    // ── KPI 카드 실데이터 반영 ──
+    const okCnt    = d.items.filter(i => i.status === 'ok').length;
+    const warnCnt  = d.items.filter(i => i.status === 'warn').length;
+    const alertCnt = d.items.filter(i => i.status === 'alert').length;
+    document.getElementById('p5Ok').textContent       = okCnt;
+    document.getElementById('p5OkTrend').textContent  = `건 / 전체 ${d.items.length}항목`;
+    document.getElementById('p5Warn').textContent     = warnCnt;
+    document.getElementById('p5WarnTrend').textContent= alertCnt > 0 ? `건 (즉시시정 ${alertCnt}건)` : '건 · 즉시시정 없음';
+
+    const cosmOk   = d.cosmLaw.filter(c => c.status === 'ok').length;
+    const cosmBlocked = pipe?.p5?.cosmLawBlocked ?? 0;
+    document.getElementById('p5CosmCount').textContent = d.cosmLaw.length;
+    document.getElementById('p5CosmTrend').textContent =
+      cosmOk === d.cosmLaw.length
+        ? `전항목 반영 · 위반차단 ${cosmBlocked}건`
+        : `${cosmOk}/${d.cosmLaw.length} 반영`;
+
+    const cosoStatuses  = Object.values(d.coso).map(v => v.status);
+    const cosoAlertCnt  = cosoStatuses.filter(s => s === 'alert').length;
+    const cosoWarnCnt   = cosoStatuses.filter(s => s === 'warn').length;
+    const cosoLabel = cosoAlertCnt > 0 ? '요주의' : cosoWarnCnt > 0 ? '부분구축' : '양호';
+    const cosoBadge = cosoAlertCnt > 0 ? `요주의 ${cosoAlertCnt}건` : cosoWarnCnt > 0 ? `시정중 ${cosoWarnCnt}건` : '전범주 양호';
+    document.getElementById('p5Coso').textContent     = cosoLabel;
+    document.getElementById('p5CosoTrend').textContent= cosoBadge;
+
     const ct = document.getElementById('complianceTable');
     if (ct) ct.innerHTML = `<div class="tbl-wrap"><table>
       <tr><th>#</th><th>점검 항목</th><th>결과</th><th>관련 법규</th><th>상세</th><th>FAQ</th><th>완료 목표</th></tr>
