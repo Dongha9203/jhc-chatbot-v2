@@ -45,6 +45,19 @@ const MINOR_PREGN_KEYWORDS = [
   '미성년', '청소년', '14세', '어린이', '학생', '아이',
 ];
 
+// 단순 거절 키워드 (S4) — 제공 불가 정보·비업무 질문
+const REJECT_KEYWORDS = [
+  // 임원·직원 개인 연락처
+  '대표이사', '대표번호', '사장님번호', '임원연락', '직원번호', '직원연락',
+  '대표전화번호', '사장전화', '대표자전화',
+  // 회사 내부 정보
+  '내부문서', '내부자료', '직원명단', '조직도', '내부시스템',
+  // 비업무 질문
+  '오늘날씨', '주식가격', '로또번호', '코인시세', '환율',
+  // 경쟁사 정보 요청
+  '타사가격', '경쟁사', '타브랜드',
+];
+
 // 복합 정책 키워드 (S12) — 2개 이상 주제 혼재
 const COMPLEX_KEYWORDS = [
   ['환불', '쿠폰'], ['환불', '적립금'], ['교환', '할인'],
@@ -100,6 +113,11 @@ class SituationClassifier {
     // S10: 리콜·정품 문의
     if (['리콜', '회수', '정품', '가품', 'qr', '홀로그램'].some(k => q.includes(k))) {
       return { situation: SITUATIONS.S10, confidence: 0.85, meta: { law: '화장품법 제15조의2' } };
+    }
+
+    // S4: 단순 거절 (제공 불가 정보·비업무 질문)
+    if (REJECT_KEYWORDS.some(k => q.includes(k.replace(/\s/g, '')))) {
+      return { situation: SITUATIONS.S4, confidence: 0.92, meta: { reject: true } };
     }
 
     // 기본: S1 (검색 결과에 따라 S2·S3·S4·S5 로 변환됨)
