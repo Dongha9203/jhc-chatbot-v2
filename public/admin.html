@@ -397,10 +397,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p3">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">📩 이번달 총 응답</div><div class="kpi-val blue">487</div><div class="kpi-trend">카카오+이메일</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">🤗 공감톤</div><div class="kpi-val teal">62%</div><div class="kpi-trend">302건</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">🔄 거절톤</div><div class="kpi-val orange">23%</div><div class="kpi-trend">112건</div></div>
-    <div class="kpi-card green"><div class="kpi-label">📞 에스컬레이션</div><div class="kpi-val green">15%</div><div class="kpi-trend">73건</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">📩 이번달 총 응답</div><div class="kpi-val blue" id="p3total">—</div><div class="kpi-trend" id="p3totalTrend">최근 30일</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">🤗 공감톤</div><div class="kpi-val teal" id="p3empathy">—</div><div class="kpi-trend" id="p3empathyCount">—</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">🔄 거절톤</div><div class="kpi-val orange" id="p3reject">—</div><div class="kpi-trend" id="p3rejectCount">—</div></div>
+    <div class="kpi-card green"><div class="kpi-label">📞 에스컬레이션</div><div class="kpi-val green" id="p3escalate">—</div><div class="kpi-trend" id="p3escalateCount">—</div></div>
   </div>
   <div class="grid-2">
     <div class="card">
@@ -1273,16 +1273,42 @@ async function reindexKB() {
 // ══════════════════════════════════════════
 async function loadP3() {
   try {
-    const d = await api('/stats');
+    const [stats, pipe] = await Promise.all([api('/stats'), api('/pipeline')]);
+
+    // ── KPI 카드 실데이터 반영 ──
+    const tone  = pipe?.p3?.toneRatio || {};
+    const tTotal = tone.total || 0;
+    const totalMsg = stats.totalMessages || tTotal || 0;
+
+    document.getElementById('p3total').textContent        = totalMsg + '건';
+    document.getElementById('p3totalTrend').textContent   =
+      (stats.byChannel || []).map(c => c.channel).join('+') || '최근 30일';
+
+    const empPct  = tone.empathy  ?? null;
+    const rejPct  = tone.reject   ?? null;
+    const escPct  = tone.escalate ?? null;
+
+    document.getElementById('p3empathy').textContent      = empPct  !== null ? empPct  + '%' : '—';
+    document.getElementById('p3empathyCount').textContent = empPct  !== null && tTotal ? Math.round(tTotal * empPct  / 100) + '건' : '—';
+    document.getElementById('p3reject').textContent       = rejPct  !== null ? rejPct  + '%' : '—';
+    document.getElementById('p3rejectCount').textContent  = rejPct  !== null && tTotal ? Math.round(tTotal * rejPct  / 100) + '건' : '—';
+    document.getElementById('p3escalate').textContent     = escPct  !== null ? escPct  + '%' : '—';
+    document.getElementById('p3escalateCount').textContent= escPct  !== null && tTotal ? Math.round(tTotal * escPct  / 100) + '건' : '—';
+
+    // ── 12상황 분류 분포 ──
     const el = document.getElementById('p3Situations');
-    if (el && d.bySituation) {
-      const max = Math.max(...d.bySituation.map(s=>s.count));
-      el.innerHTML = d.bySituation.map(s=>`
+    if (el && stats.bySituation?.length > 0) {
+      const max = Math.max(...stats.bySituation.map(s => s.count));
+      el.innerHTML = stats.bySituation.map(s => `
         <div class="prog-wrap">
           <div class="prog-label"><span>${s.situation}</span><span style="font-weight:700;">${s.count}건</span></div>
           <div class="prog-bar"><div class="prog-fill" style="width:${(s.count/max*100).toFixed(0)}%;background:var(--primary);"></div></div>
         </div>`).join('');
+    } else if (el) {
+      el.innerHTML = '<div style="color:var(--gray4);font-size:12px;padding:12px 0;">아직 상황 분류 데이터가 없습니다.</div>';
     }
+
+    // ── 톤 설정 관리 ──
     const ts = document.getElementById('toneSettings');
     if (ts) ts.innerHTML = [
       ['발랄·트렌디 톤', 'Honey 브랜드 보이스', true],
@@ -1290,12 +1316,13 @@ async function loadP3() {
       ['감정격화 즉시 에스컬', '감지 시 담당자 즉시 연결', true],
       ['카카오톡 200자 제한', '자동 압축 적용', true],
       ['다국어 입력 병기', '영어 입력시 한+영 응답', true],
-    ].map(([name,desc,on])=>`
+    ].map(([name, desc, on]) => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--gray1);border-radius:8px;">
         <div><div style="font-size:13px;font-weight:700;">${name}</div><div style="font-size:11px;color:var(--gray4);">${desc}</div></div>
-        <label class="toggle"><input type="checkbox" ${on?'checked':''}><span class="tgl-slider"></span></label>
+        <label class="toggle"><input type="checkbox" ${on ? 'checked' : ''}><span class="tgl-slider"></span></label>
       </div>`).join('');
-  } catch(e) {}
+
+  } catch(e) { showNotif('P3 로드 실패', 'error'); }
 }
 
 // ══════════════════════════════════════════
