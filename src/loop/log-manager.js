@@ -109,6 +109,8 @@ class LogManager {
   // ── 미해결 패턴 집계 (atomic upsert via RPC) ──
   async _aggregateUnresolved(input) {
     const key = input.substring(0, 50).trim();
+    // 인코딩 깨진 입력(EUC-KR 혼입, U+FFFD 대체 문자) 저장 차단
+    if (!key || key.includes('�') || key.includes('￾') || key.length < 2) return;
     const { error } = await this.client.rpc('increment_unresolved_pattern', { pattern_key: key });
     if (error) logger.error('미해결 패턴 집계 오류', error);
   }
