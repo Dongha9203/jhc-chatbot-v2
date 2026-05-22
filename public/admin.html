@@ -2231,18 +2231,19 @@ async function loadEvaluation() {
       if (neuTrendEl) neuTrendEl.textContent = '';
     }
 
-    // ── 고객 평가 목록 ──
+    // ── 고객 평가 목록: comment가 있는 실제 고객 평가만 표시 ──
     const el = document.getElementById('evalList');
     if (el) {
-      if (!isReal || !d.list?.length) {
+      const realList = isReal ? (d.list || []).filter(e => e.comment && e.comment.trim() !== '') : [];
+      if (!realList.length) {
         el.innerHTML = `
           <div style="text-align:center;padding:48px 20px;color:var(--gray4);">
             <div style="font-size:36px;margin-bottom:12px;">📭</div>
             <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:6px;">아직 등록된 고객 평가가 없습니다</div>
-            <div style="font-size:12px;line-height:1.7;">챗봇 대화 후 자동 집계되거나<br>우측 상단 <b>+ 평가 등록</b> 버튼으로 직접 추가할 수 있습니다.</div>
+            <div style="font-size:12px;line-height:1.7;">우측 상단 <b>+ 평가 등록</b> 버튼으로 직접 추가할 수 있습니다.</div>
           </div>`;
       } else {
-        el.innerHTML = d.list.map(e=>`
+        el.innerHTML = realList.map(e=>`
           <div class="eval-card">
             <div class="eval-avatar">${(e.userName||'?').charAt(0)}</div>
             <div style="flex:1;">
