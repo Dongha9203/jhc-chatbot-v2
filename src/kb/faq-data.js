@@ -21,6 +21,10 @@ fs.watch(KB_PATH, { persistent: false }, () => {
       const fresh = loadFromDisk();
       FAQ_DATA.splice(0, FAQ_DATA.length, ...fresh);
       console.log(`[KB] hot-reload 완료 — ${fresh.length}건 반영`);
+      // 검색 엔진 벡터 인덱스도 무효화 (lazy require로 순환 참조 방지)
+      try {
+        require('../engine/tfidf-search').searchEngine.initialized = false;
+      } catch (_) { /* 엔진 미로드 상태면 무시 */ }
     } catch (e) {
       console.error('[KB] hot-reload 실패:', e.message);
     }
