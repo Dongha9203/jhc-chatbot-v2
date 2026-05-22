@@ -397,10 +397,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p3">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">📩 이번달 총 응답</div><div class="kpi-val blue" id="p3total">—</div><div class="kpi-trend" id="p3totalTrend">최근 30일</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">🤗 공감톤</div><div class="kpi-val teal" id="p3empathy">—</div><div class="kpi-trend" id="p3empathyCount">—</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">🔄 거절톤</div><div class="kpi-val orange" id="p3reject">—</div><div class="kpi-trend" id="p3rejectCount">—</div></div>
-    <div class="kpi-card green"><div class="kpi-label">📞 에스컬레이션</div><div class="kpi-val green" id="p3escalate">—</div><div class="kpi-trend" id="p3escalateCount">—</div></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">📩 이번달 총 응답</div><div class="kpi-val blue" id="p3total">—</div><div class="kpi-trend" id="p3totalTrend">최근 30일</div><button class="btn-detail" onclick="showP3Detail('total')">세부내용</button></div>
+    <div class="kpi-card teal" style="position:relative;"><div class="kpi-label">🤗 공감톤</div><div class="kpi-val teal" id="p3empathy">—</div><div class="kpi-trend" id="p3empathyCount">—</div><button class="btn-detail" onclick="showP3Detail('empathy')">세부내용</button></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">🔄 거절톤</div><div class="kpi-val orange" id="p3reject">—</div><div class="kpi-trend" id="p3rejectCount">—</div><button class="btn-detail" onclick="showP3Detail('reject')">세부내용</button></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">📞 에스컬레이션</div><div class="kpi-val green" id="p3escalate">—</div><div class="kpi-trend" id="p3escalateCount">—</div><button class="btn-detail" onclick="showP3Detail('escalate')">세부내용</button></div>
   </div>
   <div class="grid-2">
     <div class="card">
@@ -1271,9 +1271,11 @@ async function reindexKB() {
 // ══════════════════════════════════════════
 // P3 3톤 분리
 // ══════════════════════════════════════════
+let _p3Data = null;
 async function loadP3() {
   try {
     const [stats, pipe] = await Promise.all([api('/stats'), api('/pipeline')]);
+    _p3Data = { stats, pipe };
 
     // ── KPI 카드 실데이터 반영 ──
     const tone  = pipe?.p3?.toneRatio || {};
@@ -1323,6 +1325,144 @@ async function loadP3() {
       </div>`).join('');
 
   } catch(e) { showNotif('P3 로드 실패', 'error'); }
+}
+
+// ══════════════════════════════════════════
+// P3 3톤 분리 세부내용
+// ══════════════════════════════════════════
+async function showP3Detail(type) {
+  if (!_p3Data) {
+    const [stats, pipe] = await Promise.all([api('/stats'), api('/pipeline')]);
+    _p3Data = { stats, pipe };
+  }
+  const stats = _p3Data.stats || {};
+  const pipe  = _p3Data.pipe  || {};
+  const tone  = pipe.p3?.toneRatio || {};
+
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const tTotal    = tone.total    || 0;
+  const empPct    = tone.empathy  ?? null;
+  const rejPct    = tone.reject   ?? null;
+  const escPct    = tone.escalate ?? null;
+  const empCnt    = empPct !== null && tTotal ? Math.round(tTotal * empPct  / 100) : null;
+  const rejCnt    = rejPct !== null && tTotal ? Math.round(tTotal * rejPct  / 100) : null;
+  const escCnt    = escPct !== null && tTotal ? Math.round(tTotal * escPct  / 100) : null;
+
+  const totalMsg  = stats.totalMessages || tTotal || 0;
+  const resolved  = stats.resolved  || 0;
+  const unresolved= stats.unresolved || (totalMsg - resolved) || 0;
+  const escalated = stats.escalated || 0;
+  const resolveRate = stats.resolveRate || '—';
+
+  // bySituation에서 상황별 건수 추출
+  const sitMap = {};
+  (stats.bySituation || []).forEach(s => { sitMap[s.situation] = s.count; });
+
+  // 공감톤 적용 상황 합계
+  const empathySituations = ['정상_응답','정보_부재','리콜_정품'];
+  const empathySitTotal = empathySituations.reduce((s, k) => s + (sitMap[k] || 0), 0);
+  // 거절톤 적용 상황 합계
+  const rejectSituations = ['정책_위반','단순_거절','복합_정책'];
+  const rejectSitTotal = rejectSituations.reduce((s, k) => s + (sitMap[k] || 0), 0);
+  // 에스컬 적용 상황 합계
+  const escalateSituations = ['감정_격화','피부_부작용','에스컬'];
+  const escalateSitTotal = escalateSituations.reduce((s, k) => s + (sitMap[k] || 0), 0);
+
+  // 채널 분포
+  const channels = (stats.byChannel || []).map(c => `${c.channel}(${c.c ?? c.count ?? 0}건)`).join(' · ') || '—';
+
+  const pct = v => v !== null ? v + '%' : '—';
+  const cnt = v => v !== null ? v + '건' : '—';
+  const badge = (v, good, warn) => v === null ? 'gray' : v >= good ? 'green' : v >= warn ? 'yellow' : 'orange';
+
+  const configs = {
+    total: {
+      title: '📩 이번달 총 응답 — 세부내용',
+      desc: '최근 30일간 챗봇이 수신·처리한 <b>전체 고객 메시지 건수</b>입니다. ' +
+            '자동 해결(KB 검색 성공)·미해결(담당자 필요)·에스컬레이션(즉시 연결)으로 구분되며, ' +
+            '공감·거절·에스컬 3톤 분리의 모수가 됩니다.',
+      rows: [
+        row('총 응답 건수',      totalMsg + '건',      'blue'),
+        row('자동 해결',         resolved + '건',      resolved >= totalMsg * 0.8 ? 'green' : 'yellow'),
+        row('미해결',            unresolved + '건',    unresolved > 0 ? 'orange' : 'green'),
+        row('에스컬레이션',      escalated + '건',     'yellow'),
+        row('자동 해결률',       resolveRate,          'blue'),
+        row('채널 분포',         channels,             'gray'),
+        row('공감톤 분류 건수',  cnt(empCnt),          'teal'),
+        row('거절톤 분류 건수',  cnt(rejCnt),          'orange'),
+        row('에스컬 분류 건수',  cnt(escCnt),          'yellow'),
+        row('집계 기간',         '최근 30일 (Supabase 실데이터)', 'gray'),
+      ],
+    },
+    empathy: {
+      title: '🤗 공감톤 — 세부내용',
+      desc: '<b>공감톤</b>은 KB에 답변이 있는 일반 문의에 적용되는 기본 응답 톤입니다. ' +
+            '"Honey" 브랜드 보이스로 <b>공감 1줄 → 핵심 답변 → FAQ 출처(§번호)</b> 형식으로 구성됩니다. ' +
+            '이모지를 활용한 발랄·트렌디 톤이 특징이며, 12상황 중 긍정·정보 제공 상황에 자동 적용됩니다.',
+      rows: [
+        row('공감톤 비율',        pct(empPct),          badge(empPct, 60, 40)),
+        row('공감톤 건수',        cnt(empCnt),          'teal'),
+        row('정상_응답 건수',     (sitMap['정상_응답']  || 0) + '건', 'green'),
+        row('정보_부재 건수',     (sitMap['정보_부재']  || 0) + '건', 'yellow'),
+        row('리콜_정품 건수',     (sitMap['리콜_정품']  || 0) + '건', 'blue'),
+        row('상황별 합계',        empathySitTotal + '건 (공감 적용 상황)', 'teal'),
+        row('응답 구조',          'R(공감) → C(핵심) → F(출처) → V(검증)', 'gray'),
+        row('이모지 활성화',      '카카오톡 응답 시 이모지 포함',     'gray'),
+        row('출처 제공',          'FAQ §번호 자동 삽입',              'gray'),
+      ],
+    },
+    reject: {
+      title: '🔄 거절톤 — 세부내용',
+      desc: '<b>거절톤</b>은 정책 위반·불가 요청에 적용되는 응답 톤입니다. ' +
+            '"죄송합니다"로 시작하는 공감 어조로 <b>정책 이유 설명 → 가능한 대안 제시</b> 구조로 응답합니다. ' +
+            '단정적 거절 없이 "~경우 확인이 어렵습니다"와 같은 부드러운 표현을 사용하며 ' +
+            '함정2(책임 단정) 차단 원칙이 함께 적용됩니다.',
+      rows: [
+        row('거절톤 비율',        pct(rejPct),          rejPct !== null && rejPct <= 15 ? 'green' : rejPct !== null && rejPct <= 30 ? 'yellow' : 'orange'),
+        row('거절톤 건수',        cnt(rejCnt),          'orange'),
+        row('정책_위반 건수',     (sitMap['정책_위반']  || 0) + '건', 'orange'),
+        row('단순_거절 건수',     (sitMap['단순_거절']  || 0) + '건', 'yellow'),
+        row('복합_정책 건수',     (sitMap['복합_정책']  || 0) + '건', 'yellow'),
+        row('상황별 합계',        rejectSitTotal + '건 (거절 적용 상황)', 'orange'),
+        row('응답 구조',          '공감(사과) → 정책 설명 → 대안 제시', 'gray'),
+        row('함정2 차단 원칙',    '책임 단정 표현 자동 차단',          'gray'),
+        row('거절 기준',          'KB 정책 문서 4건 기반',             'gray'),
+      ],
+    },
+    escalate: {
+      title: '📞 에스컬레이션 — 세부내용',
+      desc: '<b>에스컬레이션 톤</b>은 챗봇이 직접 해결하기 어려운 경우 <b>담당자 즉시 연결</b>을 안내하는 응답입니다. ' +
+            '감정 격화·피부 부작용·법적 분쟁 등 민감 상황에서 자동 트리거됩니다. ' +
+            '격화 키워드 12종 감지 시 즉시 에스컬레이션되며, 카카오톡에서는 상담원 연결 버튼이 함께 표시됩니다.',
+      rows: [
+        row('에스컬레이션 비율',  pct(escPct),          escPct !== null && escPct <= 10 ? 'green' : escPct !== null && escPct <= 20 ? 'yellow' : 'orange'),
+        row('에스컬레이션 건수',  cnt(escCnt),          'yellow'),
+        row('실제 에스컬 기록',   escalated + '건 (Supabase)',          escalated > 0 ? 'orange' : 'green'),
+        row('감정_격화 건수',     (sitMap['감정_격화']  || 0) + '건', 'orange'),
+        row('피부_부작용 건수',   (sitMap['피부_부작용']|| 0) + '건', 'orange'),
+        row('에스컬 상황 합계',   escalateSitTotal + '건 (에스컬 적용 상황)', 'yellow'),
+        row('격화 키워드',        '12종 자동 감지 (욕설·법적·환불강요 등)', 'gray'),
+        row('카카오톡 연동',      '상담원 연결 버튼 자동 표시',        'gray'),
+        row('에스컬 후 처리',     'P4 폐곡선 미해결 패턴 자동 기록',   'gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  if (!cfg) return;
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>
+     <div style="margin-top:12px;padding:10px 14px;background:var(--sky);border-radius:8px;font-size:11px;color:var(--primary);">
+       📊 3톤 구성: 공감 <b>${pct(empPct)}</b> &nbsp;|&nbsp; 거절 <b>${pct(rejPct)}</b> &nbsp;|&nbsp; 에스컬 <b>${pct(escPct)}</b> &nbsp;|&nbsp; 총 <b>${totalMsg}건</b>
+     </div>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 // ══════════════════════════════════════════
