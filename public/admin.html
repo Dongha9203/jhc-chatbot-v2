@@ -2206,54 +2206,90 @@ async function loadEvaluation() {
     const d = await api('/evaluation');
     _evalData = d;
     const s = d.summary || {};
-    const evalTotal = s.total || 0;
-    document.getElementById('evalNps').textContent = s.nps ?? '—';
-    document.getElementById('evalPos').textContent = (s.positive ?? '—') + (s.positive != null ? '%' : '');
-    document.getElementById('evalNeu').textContent = (s.neutral  ?? '—') + (s.neutral  != null ? '%' : '');
-    document.getElementById('evalNeg').textContent = (s.negative ?? '—') + (s.negative != null ? '%' : '');
-    // 트렌드에 건수 표시
-    const posCnt = evalTotal ? Math.round(evalTotal * (s.positive||0) / 100) : 0;
-    const neuCnt = evalTotal ? Math.round(evalTotal * (s.neutral ||0) / 100) : 0;
-    const posTrendEl = document.getElementById('evalPosTrend');
-    const neuTrendEl = document.getElementById('evalNeuTrend');
-    if (posTrendEl) posTrendEl.textContent = evalTotal ? `총 ${posCnt}건` : '—';
-    if (neuTrendEl) neuTrendEl.textContent = evalTotal ? `총 ${neuCnt}건` : '—';
-    const el = document.getElementById('evalList');
-    if (el) el.innerHTML = d.list.map(e=>`
-      <div class="eval-card">
-        <div class="eval-avatar">${(e.userName||'?').charAt(0)}</div>
-        <div style="flex:1;">
-          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
-            <span class="eval-name">${e.userName||'고객'}</span>
-            <span class="stars">${'★'.repeat(e.score)}${'☆'.repeat(5-e.score)}</span>
-            <span style="font-size:10px;color:var(--gray4);">${timeAgo(e.createdAt)}</span>
-            ${e.category ? `<span class="badge info" style="font-size:10px;">${e.category}</span>` : ''}
-            <span class="badge ${e.channel==='kakao'?'ok':'info'}" style="font-size:10px;">${e.channel||'—'}</span>
-          </div>
-          <div class="eval-text">${e.comment||'(코멘트 없음)'}</div>
-          <div class="eval-src">📎 ${e.source||'자동 집계'}</div>
-        </div>
-      </div>`).join('');
-    const cr = document.getElementById('evalCriteria');
-    if (cr && d.criteria) {
-      const labels = {accuracy:'응답 정확도',speed:'응답 속도',naturalness:'톤 자연스러움',resolution:'문제 해결도',escalate:'에스컬 만족도'};
-      const colors = {accuracy:'var(--green)',speed:'var(--primary)',naturalness:'var(--accent)',resolution:'var(--accent2)',escalate:'var(--yellow)'};
-      cr.innerHTML = Object.entries(d.criteria).map(([k,v])=>`
-        <div class="prog-wrap">
-          <div class="prog-label"><span>${labels[k]||k}</span><span style="font-weight:700;color:${colors[k]}">${v}/5.0</span></div>
-          <div class="prog-bar"><div class="prog-fill" style="width:${v/5*100}%;background:${colors[k]}"></div></div>
-        </div>`).join('') +
-        `<div style="margin-top:8px;font-size:10px;color:var(--gray4);">※ 기준별 점수는 운영 목표 추정치입니다. 고객이 직접 항목별 평가 시 갱신됩니다.</div>`;
+    const isReal = d.source === 'postgresql';  // 실데이터 여부
+
+    // ── KPI 카드: 실데이터 없으면 — 표시 ──
+    if (isReal) {
+      const evalTotal = s.total || 0;
+      document.getElementById('evalNps').textContent = s.nps ?? '—';
+      document.getElementById('evalPos').textContent = (s.positive ?? '—') + (s.positive != null ? '%' : '');
+      document.getElementById('evalNeu').textContent = (s.neutral  ?? '—') + (s.neutral  != null ? '%' : '');
+      document.getElementById('evalNeg').textContent = (s.negative ?? '—') + (s.negative != null ? '%' : '');
+      const posCnt = evalTotal ? Math.round(evalTotal * (s.positive||0) / 100) : 0;
+      const neuCnt = evalTotal ? Math.round(evalTotal * (s.neutral ||0) / 100) : 0;
+      const posTrendEl = document.getElementById('evalPosTrend');
+      const neuTrendEl = document.getElementById('evalNeuTrend');
+      if (posTrendEl) posTrendEl.textContent = evalTotal ? `총 ${posCnt}건` : '—';
+      if (neuTrendEl) neuTrendEl.textContent = evalTotal ? `총 ${neuCnt}건` : '—';
+    } else {
+      ['evalNps','evalPos','evalNeu','evalNeg'].forEach(id => {
+        document.getElementById(id).textContent = '—';
+      });
+      const posTrendEl = document.getElementById('evalPosTrend');
+      const neuTrendEl = document.getElementById('evalNeuTrend');
+      if (posTrendEl) posTrendEl.textContent = '';
+      if (neuTrendEl) neuTrendEl.textContent = '';
     }
-    // 개선 권고 박스 — 실 미해결 패턴 수로 동적 업데이트
+
+    // ── 고객 평가 목록 ──
+    const el = document.getElementById('evalList');
+    if (el) {
+      if (!isReal || !d.list?.length) {
+        el.innerHTML = `
+          <div style="text-align:center;padding:48px 20px;color:var(--gray4);">
+            <div style="font-size:36px;margin-bottom:12px;">📭</div>
+            <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:6px;">아직 등록된 고객 평가가 없습니다</div>
+            <div style="font-size:12px;line-height:1.7;">챗봇 대화 후 자동 집계되거나<br>우측 상단 <b>+ 평가 등록</b> 버튼으로 직접 추가할 수 있습니다.</div>
+          </div>`;
+      } else {
+        el.innerHTML = d.list.map(e=>`
+          <div class="eval-card">
+            <div class="eval-avatar">${(e.userName||'?').charAt(0)}</div>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
+                <span class="eval-name">${e.userName||'고객'}</span>
+                <span class="stars">${'★'.repeat(Math.max(0,Math.min(5,e.score||0)))}${'☆'.repeat(Math.max(0,5-Math.min(5,e.score||0)))}</span>
+                <span style="font-size:10px;color:var(--gray4);">${timeAgo(e.createdAt)}</span>
+                ${e.category ? `<span class="badge info" style="font-size:10px;">${e.category}</span>` : ''}
+                <span class="badge ${e.channel==='kakao'?'ok':'info'} " style="font-size:10px;">${e.channel||'—'}</span>
+              </div>
+              <div class="eval-text">${e.comment||'(코멘트 없음)'}</div>
+              <div class="eval-src">📎 ${e.source||'자동 집계'}</div>
+            </div>
+          </div>`).join('');
+      }
+    }
+
+    // ── 평가 기준별 점수: 실데이터 없으면 빈 안내 ──
+    const cr = document.getElementById('evalCriteria');
+    if (cr) {
+      if (!isReal) {
+        cr.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--gray4);font-size:12px;">
+          고객 평가가 누적되면<br>기준별 점수가 자동으로 표시됩니다.</div>`;
+      } else if (d.criteria) {
+        const labels = {accuracy:'응답 정확도',speed:'응답 속도',naturalness:'톤 자연스러움',resolution:'문제 해결도',escalate:'에스컬 만족도'};
+        const colors = {accuracy:'var(--green)',speed:'var(--primary)',naturalness:'var(--accent)',resolution:'var(--accent2)',escalate:'var(--yellow)'};
+        cr.innerHTML = Object.entries(d.criteria).map(([k,v])=>`
+          <div class="prog-wrap">
+            <div class="prog-label"><span>${labels[k]||k}</span><span style="font-weight:700;color:${colors[k]}">${v}/5.0</span></div>
+            <div class="prog-bar"><div class="prog-fill" style="width:${v/5*100}%;background:${colors[k]}"></div></div>
+          </div>`).join('');
+      }
+    }
+
+    // ── 개선 권고: 실데이터 없으면 안내 문구만 ──
     const advEl = document.getElementById('evalAdvice');
     if (advEl) {
-      const unresolvedCount = _top10Data?.patterns?.filter(p => !p.resolved).length
-        ?? _p4Data?.patterns?.filter(p => !p.resolved).length
-        ?? null;
-      const cntText = unresolvedCount !== null ? `KB 미해결 ${unresolvedCount}건` : 'KB 미해결 패턴';
-      const avgTxt  = s.avgScore ? `현재 평균 평점 ${s.avgScore}점` : '평점 데이터 집계중';
-      advEl.innerHTML = `💡 <strong>개선 권고</strong><br>${avgTxt}<br>→ P3 톤 갱신 + ${cntText} 완료 시 NPS 상승 예상`;
+      if (!isReal) {
+        advEl.innerHTML = `💡 <strong>개선 권고</strong><br>고객 평가 데이터가 수집되면 자동으로 개선 권고가 생성됩니다.`;
+      } else {
+        const unresolvedCount = _top10Data?.patterns?.filter(p => !p.resolved).length
+          ?? _p4Data?.patterns?.filter(p => !p.resolved).length
+          ?? null;
+        const cntText = unresolvedCount !== null ? `KB 미해결 ${unresolvedCount}건` : 'KB 미해결 패턴';
+        const avgTxt  = s.avgScore ? `현재 평균 평점 ${s.avgScore}점` : '평점 데이터 집계중';
+        advEl.innerHTML = `💡 <strong>개선 권고</strong><br>${avgTxt}<br>→ P3 톤 갱신 + ${cntText} 완료 시 NPS 상승 예상`;
+      }
     }
   } catch(e) { showNotif('평가 로드 실패','error'); }
 }
