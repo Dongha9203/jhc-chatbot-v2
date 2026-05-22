@@ -126,11 +126,21 @@ async function safeGetStats() {
   return getSimulatedStats();
 }
 
+function isValidPattern(pattern) {
+  if (!pattern || typeof pattern !== 'string') return false;
+  if (pattern.includes('�')) return false;   // UTF-8 디코딩 오류 (EUC-KR 혼입)
+  if (pattern.trim().length < 2) return false;
+  // 한국어·영문·숫자·일반 기호만 허용 — 인코딩 깨진 제어문자 차단
+  const garbage = /[\x00-\x08\x0E-\x1F\x7F]/;
+  return !garbage.test(pattern);
+}
+
 async function safeGetTop10(days) {
   if (!logManager.client) return { data: [], source: 'no_db' };
   try {
     const rows = await logManager.getAllPatterns(days);
-    return { data: rows, source: rows.length > 0 ? 'db' : 'empty' };
+    const clean = rows.filter(r => isValidPattern(r.pattern));
+    return { data: clean, source: clean.length > 0 ? 'db' : 'empty' };
   } catch (e) {
     logger.warn('Top10 조회 오류 — 빈 결과 반환', e.message);
     return { data: [], source: 'error' };

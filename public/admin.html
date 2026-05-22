@@ -2512,9 +2512,18 @@ function showTop10Detail(type) {
   document.getElementById('statDetailModal').classList.add('open');
 }
 
+function isValidPattern(p) {
+  if (!p || p.trim().length < 2) return false;
+  if (p.includes('�')) return false;
+  if (p.includes('￾') || p.includes('￿')) return false;
+  return true;
+}
+
 function renderTop10Table(patterns, targetId, source) {
   const el = document.getElementById(targetId);
   if (!el || !patterns) return;
+  const validPatterns = patterns.filter(r => isValidPattern(r.pattern));
+  patterns = validPatterns;
   // 실데이터 없음 (Supabase 미연결)
   if (patterns.length === 0 && source !== 'db') {
     el.innerHTML = `<div style="padding:36px;text-align:center;">
