@@ -371,10 +371,10 @@ tr:hover td{background:var(--sky);}
 ══════════════════════════════ -->
 <div class="page" id="page-p2">
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">🎯 응답 정확도</div><div class="kpi-val blue" id="p2acc">—</div><div class="kpi-trend">목표 93%</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">📚 KB 문서 수</div><div class="kpi-val teal" id="p2docs">—</div><div class="kpi-trend">어휘 <span id="p2vocab">—</span>개</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">⚠️ 환각 발생률</div><div class="kpi-val orange">5%</div><div class="kpi-trend">목표 2%</div></div>
-    <div class="kpi-card green"><div class="kpi-label">⚡ 평균 응답</div><div class="kpi-val green" style="font-size:22px;" id="p2ms">—</div><div class="kpi-trend">인메모리 TF-IDF</div></div>
+    <div class="kpi-card blue" style="position:relative;"><div class="kpi-label">🎯 응답 정확도</div><div class="kpi-val blue" id="p2acc">—</div><div class="kpi-trend">목표 93%</div><button class="btn-detail" onclick="showP2Detail('accuracy')">세부내용</button></div>
+    <div class="kpi-card teal" style="position:relative;"><div class="kpi-label">📚 KB 문서 수</div><div class="kpi-val teal" id="p2docs">—</div><div class="kpi-trend">어휘 <span id="p2vocab">—</span>개</div><button class="btn-detail" onclick="showP2Detail('docs')">세부내용</button></div>
+    <div class="kpi-card orange" style="position:relative;"><div class="kpi-label">⚠️ 환각 발생률</div><div class="kpi-val orange" id="p2halluc">—</div><div class="kpi-trend">목표 2%</div><button class="btn-detail" onclick="showP2Detail('halluc')">세부내용</button></div>
+    <div class="kpi-card green" style="position:relative;"><div class="kpi-label">⚡ 평균 응답</div><div class="kpi-val green" style="font-size:22px;" id="p2ms">—</div><div class="kpi-trend">인메모리 TF-IDF</div><button class="btn-detail" onclick="showP2Detail('speed')">세부내용</button></div>
   </div>
   <div class="grid-2">
     <div class="card">
@@ -1133,13 +1133,17 @@ function renderDashEval(data) {
 // ══════════════════════════════════════════
 // P2 RAG 엔진
 // ══════════════════════════════════════════
+let _engineData = null;
+
 async function fetchEngine() {
   try {
     const d = await api('/engine');
+    _engineData = d;
     document.getElementById('p2acc').textContent    = d.accuracy + '%';
     document.getElementById('p2docs').textContent   = d.docCount || '—';
     document.getElementById('p2vocab').textContent  = d.vocabSize || '—';
     document.getElementById('p2ms').textContent     = (d.avgResponseMs || '< 5') + 'ms';
+    document.getElementById('p2halluc').textContent = (d.hallucination ?? '—') + (d.hallucination !== undefined ? '%' : '');
     const el = document.getElementById('engineStatus');
     if (el) el.innerHTML = `
       <table><tr><th>항목</th><th>값</th><th>상태</th></tr>
@@ -1164,6 +1168,96 @@ async function fetchEngine() {
           </div>`).join('')}
       </div>`;
   } catch(e) { showNotif('엔진 조회 실패','error'); }
+}
+
+function showP2Detail(type) {
+  const d   = _engineData || {};
+  const row = (label, val, badge) =>
+    `<tr><td>${label}</td><td><span class="sd-badge ${badge}">${val}</span></td></tr>`;
+
+  const accuracy   = d.accuracy      ?? null;
+  const halluc     = d.hallucination ?? null;
+  const sourceRate = d.sourceRate    ?? null;
+  const docCount   = d.docCount      || '—';
+  const vocabSize  = d.vocabSize     || '—';
+  const avgMs      = d.avgResponseMs || '< 5';
+  const mode       = d.mode          || 'in-memory-tfidf';
+  const chromaOnline = d.chromaStatus === 'online';
+  const cacheHit   = d.cacheHitRate  || '—';
+  const trap       = d.trapBlocked   || {};
+
+  const accBadge  = accuracy  === null ? 'gray' : accuracy  >= 93 ? 'green' : accuracy  >= 80 ? 'yellow' : 'orange';
+  const hallBadge = halluc    === null ? 'gray' : halluc    <=  2 ? 'green' : halluc    <= 10 ? 'yellow' : 'orange';
+
+  const configs = {
+    accuracy: {
+      title: '🎯 응답 정확도 — 세부내용',
+      desc: 'KB(지식베이스) 검색으로 고객 질문을 담당자 개입 없이 자동 해결한 비율입니다. Supabase <b>chat_logs</b>의 resolved=1 건수를 기준으로 집계하며, TF-IDF 코사인 유사도 <b>0.25 이상</b>이면 해결로 기록됩니다.',
+      rows: [
+        row('현재 응답 정확도',   (accuracy  ?? '—') + (accuracy  !== null ? '%' : ''), accBadge),
+        row('목표 정확도',        '93% (2026 Q2)',                  'blue'),
+        row('목표까지 갭',        accuracy !== null ? Math.abs(93 - accuracy) + '%p 차이' : '데이터 수집중', accuracy !== null && accuracy >= 93 ? 'green' : 'orange'),
+        row('KB 출처 제공률',     (sourceRate ?? '—') + (sourceRate !== null ? '%' : ''), 'blue'),
+        row('해결 판정 기준',     '코사인 유사도 ≥ 0.25',           'blue'),
+        row('미해결 처리 경로',   'P4 폐곡선 → SOP 미팅 → KB 갱신','blue'),
+        row('정확도 향상 방법',   'FAQ 문항 추가·키워드 보강',       'gray'),
+        row('데이터 기준',        '최근 30일 · Supabase 실데이터',   'gray'),
+      ],
+    },
+    docs: {
+      title: '📚 KB 문서 수 — 세부내용',
+      desc: 'TF-IDF 검색 엔진에 인덱싱된 전체 지식베이스 문서 수입니다. FAQ 문항과 정책 문서가 포함되며, <b>어휘 사전</b>은 각 문서에서 추출한 고유 토큰(형태소 단위) 수로 검색 정밀도에 직접 영향을 줍니다.',
+      rows: [
+        row('총 인덱싱 문서',     docCount + '개',                   'blue'),
+        row('FAQ 문항',           typeof docCount === 'number' ? (docCount - 4) + '개' : '—', 'blue'),
+        row('정책 문서',          '4개',                             'blue'),
+        row('어휘 사전 크기',     vocabSize + '개 토큰',             'blue'),
+        row('검색 알고리즘',      'TF-IDF + 코사인 유사도',          'blue'),
+        row('ChromaDB 상태',      chromaOnline ? '온라인' : '폴백모드 (인메모리)', chromaOnline ? 'green' : 'yellow'),
+        row('인덱싱 시점',        'KB 변경 시 즉시 재인덱싱',        'gray'),
+        row('목표 문서 수',       '100개 이상 (2026 Q3 목표)',        'gray'),
+      ],
+    },
+    halluc: {
+      title: '⚠️ 환각 발생률 — 세부내용',
+      desc: '환각(Hallucination)은 챗봇이 KB에 없는 정보를 추측·생성하는 현상입니다. <b>검색 점수 0.25 미만 + 미해결(resolved=0)</b>인 경우를 환각으로 분류합니다. 함정1(정보부재 추측) 차단 건수가 환각 억제의 핵심 지표입니다.',
+      rows: [
+        row('현재 환각 발생률',   (halluc  ?? '—') + (halluc  !== null ? '%' : ''), hallBadge),
+        row('목표 환각 발생률',   '2% 이하 (2026 Q2)',              'blue'),
+        row('환각 판정 기준',     '검색 유사도 < 0.25 & resolved=0', 'blue'),
+        row('함정1 차단 — 추측 방지',  (trap.trap1    || 0) + '건 차단', trap.trap1    > 0 ? 'orange' : 'green'),
+        row('함정2 차단 — 책임 단정',  (trap.trap2    || 0) + '건 차단', trap.trap2    > 0 ? 'yellow' : 'green'),
+        row('함정3 차단 — 복합 단답',  (trap.trap3    || 0) + '건 차단', trap.trap3    > 0 ? 'yellow' : 'green'),
+        row('화장품법 위반 차단',      (trap.cosmLaw  || 0) + '건 차단', trap.cosmLaw  > 0 ? 'orange' : 'green'),
+        row('환각 억제 방법',   'KB 충실도 향상 + TF-IDF 임계값 조정','gray'),
+      ],
+    },
+    speed: {
+      title: '⚡ 평균 응답 — 세부내용',
+      desc: '고객 질문 수신부터 응답 반환까지의 평균 처리 시간입니다. <b>인메모리 TF-IDF</b> 방식은 외부 AI API 호출 없이 서버 내에서 직접 연산하므로 4~5ms의 초고속 응답이 가능합니다. Supabase 로그 저장은 비동기로 처리되어 응답 지연이 없습니다.',
+      rows: [
+        row('현재 평균 응답 시간', avgMs + 'ms',                       'green'),
+        row('목표 응답 시간',     '100ms 이하',                       'blue'),
+        row('검색 방식',          'TF-IDF 코사인 유사도 (인메모리)',    'blue'),
+        row('외부 API 호출',      '없음 — 완전 로컬 연산',             'green'),
+        row('ChromaDB 연결',      chromaOnline ? '온라인 (벡터DB 사용)' : '오프라인 (인메모리 폴백)', chromaOnline ? 'blue' : 'yellow'),
+        row('어휘 연산량',        vocabSize + '개 토큰 실시간 계산',   'blue'),
+        row('캐시 적중률',        cacheHit,                           'blue'),
+        row('로그 저장 방식',     'Supabase 비동기 — 응답 지연 없음',  'gray'),
+      ],
+    },
+  };
+
+  const cfg = configs[type];
+  if (!cfg) return;
+  document.getElementById('sdTitle').textContent = cfg.title;
+  document.getElementById('sdBody').innerHTML =
+    `<div class="sd-desc">${cfg.desc}</div>
+     <table class="sd-table">
+       <thead><tr><th>항목</th><th>값</th></tr></thead>
+       <tbody>${cfg.rows.join('')}</tbody>
+     </table>`;
+  document.getElementById('statDetailModal').classList.add('open');
 }
 
 async function reindexKB() {
