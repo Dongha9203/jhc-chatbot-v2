@@ -250,6 +250,45 @@ class LogManager {
     }
   }
 
+  // ── P4 top10 완료/전체 요약 ──
+  async getTop10Summary(days = 30) {
+    if (!this.client) return null;
+    try {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await this.client
+        .from('unresolved_patterns')
+        .select('resolved')
+        .gte('last_seen', since);
+      if (error) throw error;
+      if (!data || data.length === 0) return { done: 0, total: 0 };
+      return {
+        done:  data.filter(r => r.resolved).length,
+        total: data.length,
+      };
+    } catch (err) {
+      logger.error('Top10 요약 오류', err);
+      return null;
+    }
+  }
+
+  // ── NPS 계산 (evaluations 기반) ──
+  async getNps() {
+    if (!this.client) return null;
+    try {
+      const { data: summaryData, error } = await this.client.rpc('get_eval_summary');
+      if (error) throw error;
+      const s = Array.isArray(summaryData) ? summaryData[0] : summaryData;
+      if (!s) return null;
+      const total = (s.positive || 0) + (s.neutral || 0) + (s.negative || 0);
+      if (!total) return null;
+      const nps = Math.round(((s.positive - s.negative) / total) * 100);
+      return Math.max(-100, Math.min(100, nps));
+    } catch (err) {
+      logger.error('NPS 계산 오류', err);
+      return null;
+    }
+  }
+
   // ── P2 정확도 집계 ──
   async getAccuracyStats(days = 30) {
     if (!this.client) return null;

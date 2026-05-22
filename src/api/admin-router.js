@@ -142,23 +142,32 @@ async function safeGetTop10(days) {
 // ═══════════════════════════════════════════
 router.get('/dashboard', async (req, res) => {
   try {
-    const [stats, top10Result, pipeline] = await Promise.all([safeGetStats(), safeGetTop10(30), getPipelineStatus()]);
-    const engine   = searchEngine.getStats();
-    const avgScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
+    const [stats, top10Result, pipeline, nps, evalData] = await Promise.all([
+      safeGetStats(), safeGetTop10(30), getPipelineStatus(),
+      logManager.getNps(),
+      logManager.getEvaluations({ limit: 3 }),
+    ]);
+    const recentEvals  = evalData.rows.length > 0 ? evalData.rows.slice(0, 3).map(r => ({
+      id: r.id, userId: r.user_id, userName: r.user_name || '고객',
+      score: r.score, category: r.category, situation: r.situation,
+      source: r.source, comment: r.comment, channel: r.channel, createdAt: r.created_at,
+    })) : evaluations.slice(0, 3);
+    const avgScore = evalData.summary?.avg_score
+      || (evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length).toFixed(1);
 
     res.json({
       kpi: {
         totalMessages: stats.totalMessages || 0,
         resolveRate:   stats.resolveRate   || '0%',
-        nps:           44,
-        avgScore:      avgScore.toFixed(1),
+        nps:           nps ?? 44,
+        avgScore:      String(avgScore),
         kbCount:       faqStore.length + POLICY_DATA.length,
         escalated:     stats.escalated || 0,
       },
-      engine,
-      recentTop5:   top10Result.data.slice(0, 5),
-      top10Source:  top10Result.source,
-      recentEvals: evaluations.slice(0, 3),
+      engine: searchEngine.getStats(),
+      recentTop5:  top10Result.data.slice(0, 5),
+      top10Source: top10Result.source,
+      recentEvals,
       pipeline,
     });
   } catch (e) {
@@ -367,15 +376,45 @@ router.get('/compliance', (req, res) => {
 // ═══════════════════════════════════════════
 async function getPipelineStatus() {
   const engine    = searchEngine.getStats();
-  const [accStats, toneStats, trapStats] = await Promise.all([
+  const [accStats, toneStats, trapStats, top10Sum] = await Promise.all([
     logManager.getAccuracyStats(30),
     logManager.getToneStats(30),
     logManager.getTrapStats(30),
+    logManager.getTop10Summary(30),
   ]);
   const toneRatio  = toneStats || { empathy: 62, reject: 23, escalate: 15 };
   const trapCounts = trapStats || trapValidator.getBlockStats();
+
+  // P1 KB진단 — faqStore 실제 데이터 분석
+  const kbTotal    = faqStore.length;
+  const kbTarget   = 50;
+  const dScore = Math.min(2.0, (kbTotal / kbTarget) * 2.0);
+  const rScore = kbTotal > 0 ? (faqStore.filter(f => f.keywords?.length > 0).length / kbTotal) * 1.0 : 0;
+  const tScore = accStats ? (accStats.sourceRate / 100) * 1.5 : 1.0;
+  const lScore = kbTotal > 0 ? (faqStore.filter(f => f.law).length / kbTotal) * 1.0 : 0;
+  const p1Score = parseFloat((dScore + rScore + tScore + lScore).toFixed(1));
+
+  // P4 폐곡선 — Supabase 실데이터
+  const top10Done  = top10Sum ? top10Sum.done  : 4;
+  const top10Total = top10Sum ? top10Sum.total : 10;
+
+  // P5 컴플라이언스 — 정적 항목 + trap_events 연동
+  const COMPLIANCE_ITEMS = [
+    { status: 'ok'   },  // 개인정보 마스킹
+    { status: 'ok'   },  // 환불 7일 룰
+    { status: 'warn' },  // 마케팅 동의
+    { status: 'ok'   },  // 외국 사용자
+    { status: 'warn' },  // 응답 로그 보관
+    { status: 'ok'   },  // 미성년자 룰
+  ];
+  const cosmLawBlocked = trapCounts.cosmLaw || 0;
+  const p5Ok    = COMPLIANCE_ITEMS.filter(i => i.status === 'ok').length;
+  const p5Warn  = COMPLIANCE_ITEMS.filter(i => i.status === 'warn').length;
+  const p5Alert = cosmLawBlocked > 0 ? 1 : 0;
+  const cosmLawFaqCount = faqStore.filter(f => f.law && f.law.includes('화장품법')).length;
+
   return {
-    p1: { score: 4.5, max: 8, d: 1.0, r: 1.0, t: 1.5, l: 1.0, argyris: 'Single→Double 전환중' },
+    p1: { score: p1Score, max: 8, d: parseFloat(dScore.toFixed(1)), r: parseFloat(rScore.toFixed(1)), t: parseFloat(tScore.toFixed(1)), l: parseFloat(lScore.toFixed(1)), argyris: 'Single→Double 전환중', source: 'kb' },
     p2: {
       accuracy:      accStats ? accStats.accuracy      : 81,
       hallucination: accStats ? accStats.hallucination : 5,
@@ -385,8 +424,8 @@ async function getPipelineStatus() {
       trapBlocked: trapCounts, trapSource: trapStats ? 'db' : 'runtime',
     },
     p3: { situations: 12, tones: 3, toneRatio, toneSource: toneStats ? 'db' : 'simulation' },
-    p4: { top10Done: 4, top10Total: 10, nextMeeting: '2026-06-03 14:00', argyrisState: 'Single→Double 전환중' },
-    p5: { ok: 4, warn: 2, alert: 0, cosmLawItems: 4 },
+    p4: { top10Done, top10Total, nextMeeting: '2026-06-03 14:00', argyrisState: 'Single→Double 전환중', source: top10Sum ? 'db' : 'simulation' },
+    p5: { ok: p5Ok, warn: p5Warn, alert: p5Alert, cosmLawItems: cosmLawFaqCount, cosmLawBlocked, source: 'kb+db' },
   };
 }
 
@@ -423,14 +462,17 @@ router.get('/evaluation', async (req, res) => {
     }
 
     const t = total || 0;
+    const pos = summary?.positive || 0;
+    const neg = summary?.negative || 0;
+    const realNps = t ? Math.max(-100, Math.min(100, Math.round(((pos - neg) / t) * 100))) : 0;
     return res.json({
       summary: {
         total: t,
         avgScore: summary?.avg_score || '0.0',
-        nps: 44,
-        positive: t ? Math.round((summary?.positive||0)/t*100) : 0,
-        neutral:  t ? Math.round((summary?.neutral||0)/t*100)  : 0,
-        negative: t ? Math.round((summary?.negative||0)/t*100) : 0,
+        nps: realNps,
+        positive: t ? Math.round(pos/t*100) : 0,
+        neutral:  t ? Math.round((summary?.neutral||0)/t*100) : 0,
+        negative: t ? Math.round(neg/t*100) : 0,
       },
       criteria: { accuracy:4.2, speed:4.6, naturalness:3.9, resolution:3.7, escalate:4.1 },
       list: rows.map(r => ({
