@@ -529,7 +529,7 @@ tr:hover td{background:var(--sky);}
     <div class="kpi-card blue" style="position:relative;">
       <div class="kpi-label">📬 총 문의</div>
       <div class="kpi-val blue" id="stTotal">—</div>
-      <div class="kpi-trend up" id="stTrend">▲ 12%</div>
+      <div class="kpi-trend" id="stTrend">—</div>
       <button class="btn-detail" onclick="showStatDetail('total')">세부내용</button>
     </div>
     <div class="kpi-card teal" style="position:relative;">
@@ -1699,6 +1699,23 @@ async function loadStats() {
     document.getElementById('stRate').textContent     = `해결률 ${d.resolveRate}`;
     document.getElementById('stEscalated').textContent= d.escalated;
     document.getElementById('stEscRate').textContent  = `에스컬률 ${Math.round(d.escalated/d.totalMessages*100)}%`;
+    // 전월 대비 트렌드
+    const mn = d.monthly || [];
+    const trendEl = document.getElementById('stTrend');
+    if (trendEl) {
+      if (mn.length >= 2) {
+        const curr = mn[mn.length-1]?.total || 0;
+        const prev = mn[mn.length-2]?.total || 0;
+        if (prev > 0) {
+          const pct = Math.round((curr - prev) / prev * 100);
+          trendEl.textContent = (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '% 전월 대비';
+          trendEl.className   = 'kpi-trend ' + (pct >= 0 ? 'up' : 'dn');
+        }
+      } else {
+        trendEl.textContent = '데이터 수집중';
+        trendEl.className   = 'kpi-trend';
+      }
+    }
     // 채널별 차트
     const cc = document.getElementById('channelChart');
     if (cc && d.byChannel && d.byChannel.length > 0) {
@@ -1798,6 +1815,11 @@ async function loadStats() {
 // ══════════════════════════════════════════
 function showStatDetail(type) {
   const d = _statsData || {};
+  // speed 세부내용은 엔진 데이터가 필요 — 없으면 비동기 로드 후 재시도
+  if (type === 'speed' && !_engineData) {
+    api('/engine').then(e => { _engineData = e; showStatDetail('speed'); });
+    return;
+  }
   const total     = d.totalMessages || 0;
   const resolved  = d.resolved      || 0;
   const unresolved= total - resolved;
@@ -1829,8 +1851,8 @@ function showStatDetail(type) {
         ['미해결 건수', `${unresolved}건`, 'orange'],
         ['자동 해결률', resolveRate, 'green'],
         ['목표 해결률', '93%', 'blue'],
-        ['검색 최소 유사도', '5% (0.05)', 'gray'],
-        ['KB 문항 수', `${d.kbCount || 55}개`, 'blue'],
+        ['검색 최소 유사도', '25% (0.25)', 'gray'],
+        ['KB 문항 수', `${_engineData?.docCount || d.kbCount || '—'}개`, 'blue'],
         ...(d.byCategory?.length > 0
           ? d.byCategory.slice(0,3).map(c => [`[${c.category}] 해결률`, c.count ? Math.round((c.resolved||0)/c.count*100)+'%' : '—', 'green'])
           : [['카테고리별', '데이터 수집중', 'gray']]),
@@ -1853,12 +1875,12 @@ function showStatDetail(type) {
       title: '⚡ 응답속도 — 세부내용',
       desc:  'TF-IDF 인메모리 검색 엔진으로 외부 AI API 없이 순수 로컬 처리합니다. 서버 메모리에 KB를 적재해 빠른 응답이 가능하며, 캐시를 통해 반복 질문은 더욱 빠르게 처리됩니다.',
       rows: [
-        ['검색 엔진', 'in-memory TF-IDF', 'blue'],
-        ['평균 응답시간', '4.2ms', 'green'],
+        ['검색 엔진', _engineData?.mode || 'in-memory TF-IDF', 'blue'],
+        ['평균 응답시간', (_engineData?.avgResponseMs ?? '< 5') + 'ms', 'green'],
         ['목표 응답시간', '100ms 이하', 'blue'],
-        ['KB 문서 수', '55개', 'blue'],
-        ['어휘 사전 크기', '4,658개', 'gray'],
-        ['캐시 적중률', '34%', 'green'],
+        ['KB 문서 수', (_engineData?.docCount || '—') + '개', 'blue'],
+        ['어휘 사전 크기', (_engineData?.vocabSize || '—') + '개', 'gray'],
+        ['캐시 적중률', _engineData?.cacheHitRate || '—', 'green'],
         ['캐시 TTL', '300초 (5분)', 'gray'],
         ['외부 AI API', '미사용 (완전 무료)', 'green'],
       ]
