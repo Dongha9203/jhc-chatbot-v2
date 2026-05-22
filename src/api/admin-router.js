@@ -45,6 +45,19 @@ let faqStore = FAQ_DATA.map((f, i) => ({
   updatedAt: new Date().toISOString().slice(0, 10),
 }));
 
+const FAQ_KB_PATH = path.resolve(__dirname, '../../data/faq-kb.json');
+
+function saveFaqToDisk() {
+  try {
+    // _idx 등 내부 필드 제거 후 원본 형식으로 저장
+    const clean = faqStore.map(({ _idx, ...rest }) => rest);
+    fs.writeFileSync(FAQ_KB_PATH, JSON.stringify(clean, null, 2), 'utf8');
+    logger.info(`FAQ KB 디스크 저장 완료: ${clean.length}건`);
+  } catch (err) {
+    logger.error('FAQ KB 디스크 저장 실패', err);
+  }
+}
+
 // ── 인메모리 평가 저장소 ──
 let evaluations = [
   { id: 1, userId: 'kakao_001', userName: '김지은', score: 5, category: '배송', situation: '정상_응답', source: 'FAQ §Q07', comment: '배송 문의 즉시 정확하게 알려줘서 만족!', channel: 'kakao', createdAt: new Date(Date.now()-2*60000).toISOString() },
@@ -305,8 +318,8 @@ router.post('/faq', (req, res) => {
     updatedAt: new Date().toISOString().slice(0, 10),
   };
   faqStore.push(item);
+  saveFaqToDisk();
   logger.info(`FAQ 추가: ${newId} — ${question.slice(0,30)}`);
-  // 검색 엔진 재초기화 트리거
   searchEngine.initialized = false;
   res.status(201).json(item);
 });
@@ -327,6 +340,7 @@ router.put('/faq/:id', (req, res) => {
     ...(sensitive !== undefined && { sensitive: Boolean(sensitive) }),
     updatedAt: new Date().toISOString().slice(0, 10),
   };
+  saveFaqToDisk();
   searchEngine.initialized = false;
   logger.info(`FAQ 수정: ${req.params.id}`);
   res.json(faqStore[idx]);
@@ -337,6 +351,7 @@ router.delete('/faq/:id', (req, res) => {
   const idx = faqStore.findIndex(f => f.id === req.params.id);
   if (idx < 0) return res.status(404).json({ error: '항목 없음' });
   faqStore.splice(idx, 1);
+  saveFaqToDisk();
   searchEngine.initialized = false;
   logger.info(`FAQ 삭제: ${req.params.id}`);
   res.json({ result: 'ok' });
