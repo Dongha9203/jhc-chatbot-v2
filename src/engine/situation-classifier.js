@@ -45,6 +45,14 @@ const MINOR_PREGN_KEYWORDS = [
   '미성년', '청소년', '14세', '어린이', '학생', '아이',
 ];
 
+// 에스컬레이션 직접 요청 키워드 (S5)
+const ESCALATE_KEYWORDS = [
+  '담당자연락', '담당자전화', '담당자콜', '콜백', '전화해줘', '전화해주세요',
+  '연락달라', '연락해줘', '연락해주세요', '전화달라', '전화주세요',
+  '사람연결', '상담원연결', '상담원바꿔', '직접통화', '사람이랑통화',
+  '담당자바꿔', '담당자연결', '담당자에게연락', '나에게연락',
+];
+
 // 단순 거절 키워드 (S4) — 제공 불가 정보·비업무 질문
 const REJECT_KEYWORDS = [
   // 임원·직원 개인 연락처
@@ -113,6 +121,11 @@ class SituationClassifier {
     // S10: 리콜·정품 문의
     if (['리콜', '회수', '정품', '가품', 'qr', '홀로그램'].some(k => q.includes(k))) {
       return { situation: SITUATIONS.S10, confidence: 0.85, meta: { law: '화장품법 제15조의2' } };
+    }
+
+    // S5: 에스컬레이션 직접 요청
+    if (ESCALATE_KEYWORDS.some(k => q.includes(k.replace(/\s/g, '')))) {
+      return { situation: SITUATIONS.S5, confidence: 0.92, meta: { escalate: true } };
     }
 
     // S4: 단순 거절 (제공 불가 정보·비업무 질문)
